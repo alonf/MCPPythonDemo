@@ -75,3 +75,13 @@
 - Commit 8df0227 published to origin/milestone-4
 - **Key learning:** Multi-protocol server architecture enables testing flexibility. Shared transport config (http_config.py) reduces duplication and improves maintainability. Session tracking via headers is the right pattern for stateless HTTP-based MCP servers.
 - **Pedagogical value:** HTTP transport demystifies how MCP can reach web-based clients. Auth patterns show production concerns. Stateless session IDs teach distributed systems thinking.
+
+## Action (2026-04-14 Milestone 4 → 5 Handoff)
+
+- Consolidated M4 squad memory: committed 992058e to `origin/milestone-4` with full team history and insights
+- Fast-forwarded `master` to M4 finalized tip (992058e) and pushed to origin
+- Created `milestone-5` from clean M4 baseline (992058e) with upstream tracking
+- Worktree left safely on `milestone-5` ready for M5 planning phase
+- Documented branch model stability and M5 scope hint in `.squad/decisions/inbox/ripley-m5-branch.md`
+- **Key learning:** Clean branch advancement with consolidated memory prevents context loss at milestone boundaries. Squad history is the team's institutional knowledge—consolidate aggressively before forward branching.
+- **Branch strategy confirmed:** Teaching arc (master + immutable milestones) + forward branch (current milestone) maintains pedagogical integrity while enabling squad work without retrospective coupling.
