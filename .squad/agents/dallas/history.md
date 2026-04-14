@@ -386,3 +386,89 @@ Implement M6 sampling-assisted diagnostics with strict allowlist validation. The
 - `PATH | grep FIELD` is a better teaching shape than JSON for Linux diagnostics because it maps directly to how humans think about `/proc` files while still remaining fully server-validated.
 - WSL/container caveats are best treated as summary context, not branching logic; the same read path should work everywhere and explain scope afterward.
 - Existing milestone regression tests should assert required surfaces as subsets when later milestones add prompts/tools without changing earlier behavior.
+---
+
+## Session: M7 Linux Safety Rule Set (2026-04-14T16:00Z)
+
+### Task
+Produce the Linux-safety rule set for Milestone 7, documenting allowed roots, traversal prevention, forbidden file classes, environment caveats, and pagination constraints for /proc and /sys snapshot access.
+
+### Approach
+1. Analyzed C# delta from bishop-m7-delta.md: M7 adds Registry Roots Service pattern (allowed-roots enforcement, elicitation-gated access, paged snapshots).
+2. Adapted to Linux: /proc and /sys are ephemeral text files, not hierarchical objects like Registry. Flattening is implicit; paging applies to lines, not tree depth.
+3. Identified safe defaults: Consolidated M6 allowlist with new system-diagnostics paths (cgroups, pressure, sys tuning).
+4. Codified forbidden paths: kcore, kmem, sysvipc, gpio, pwm, debug — all privilege-escalation or hardware-control vectors.
+5. Environmental scope: WSL detection via /proc/version string; container detection via /proc/self/cgroup markers.
+6. Elicitation contract: Same pattern as M5 process control — ask user permission *before* failure, not after.
+
+### Key Decisions
+
+On Default Roots:
+- /proc/pressure/ safe because pressure metrics are read-only aggregates.
+- /proc/sys/ permitted under /fs/, /kernel/, /vm/ prefixes; no /proc/sys/net/ by default (routing/networking state mutates).
+- /sys/fs/cgroup/ limited to cpu.max, memory.current, memory.max — not the full cgroup hierarchy.
+- /proc/[pid]/stat|status|cmdline permitted *with alive-check* — race condition tolerable; process may exit between validation and read.
+
+On Forbidden Paths:
+- /proc/kcore is the entire kernel memory image; root-only and a classic privesc target.
+- /proc/sysvipc/ contains active IPC state (shared memory, message queues); reading or writing can affect kernel semantics.
+- /sys/class/gpio/, /sys/class/pwm/ are hardware control surfaces; snapshot reads can reconfigure pins.
+- No realpath() evasion possible if the path is already forbidden (fail fast).
+
+On Symlink Escaping:
+- After os.path.normpath(), resolve with os.path.realpath().
+- If real path does not start with an allowed root, reject.
+- Caveat: /proc symlinks are kernel-volatile (fd/ entries disappear when fd closes); trust realpath() only for stable mounts.
+
+On Environment Caveats:
+- WSL detection: check /proc/version for "microsoft" substring (case-insensitive). Memory/CPU readings reflect guest, not host.
+- Container detection: check /proc/self/cgroup for "docker", "containerd", "kubepods", "lxc" markers. Readings reflect container namespace.
+- Permission errors: do not reject preemptively; let read attempt fail. Return permission_error: True in snapshot details if non-root cannot read.
+
+On Paging:
+- Default limit 50, max 500 (matching log_snapshots.py).
+- Pagination metadata: total_count, returned_count, limit, offset, has_more, next_offset.
+- Storage: session-scoped in-memory dict, thread-safe, cleared on server restart.
+
+### Learnings
+
+Snapshot Reuse Pattern:
+- Log snapshots (M3) and proc snapshots (M7) both use identical paging/storage mechanics.
+- Both model resources as read-only line-based URIs: syslog://snapshot/{id}?limit=N&offset=M and proc://snapshot/{id}?limit=N&offset=M.
+- Abstraction: snapshot = deterministic point-in-time capture + lazy pagination. Applies to any "grab a chunk of filesystem/log, page it out."
+
+Elicitation as Gatekeeper:
+- Even though we cannot change Linux filesystem permissions (unlike Windows Registry DACL), elicitation is still enforced for M7.
+- Purpose: intentionality and audit. User knows they're requesting system data; no silent expansions to new paths.
+- Parity with C# M7: Registry roots also use elicitation, even though Registry access already requires configured DACL on host.
+
+Environment Sensitivity without Branching:
+- WSL/container caveats are not special code paths; they are *metadata*.
+- Same snapshot tool works on bare-metal, WSL, Docker, Kubernetes. Differences are noted in details.environment_notes.
+- Implication: validation rules are environment-independent; only output interpretation changes.
+
+Forbidden Paths Rationale:
+- Forbidden paths are NOT a whitelist overflow; they are a class-based safety barrier.
+- Once a user has permission to access /proc, the OS (not the MCP tool) enforces file-level permissions.
+- Forbidden paths prevent *accidental category violations* (e.g., "oh, I didn't realize /sys/class/gpio/ was GPIO control, not GPIO state").
+- Teaches: "Security by design means narrow default; elicit for expansion; forbid unsafe categories entirely."
+
+Race Condition Philosophy:
+- /proc is inherently racy: processes appear and disappear; files can be deleted between list and read.
+- Mitigation is NOT to avoid races; it's to *tolerate and document* them.
+- Snapshot includes race_warnings array if entries were skipped due to TOCTOU conditions.
+- Implication: "deterministic observation" in M7 means "best-effort snapshot at a point in time," not "frozen state."
+
+### Recommendation for Ash
+
+Implement M7 proc_snapshots module using:
+1. _ProcRootsService (similar to Registry roots) with default allow-list + elicitation-gated additions.
+2. Path validation pipeline: normalize → reject .. → reject placeholders → reject forbidden → check allowed → realpath check.
+3. create_proc_snapshot(path, filter_text, max_lines) tool: validates, reads, pages.
+4. request_proc_access(path, reason) tool: elicit user approval, add to allow-list.
+5. ProcSnapshotSummary and ProcSnapshotPage DTOs (mirror log_snapshots.py structure).
+6. proc://snapshot/{id}?limit=N&offset=M resource registration.
+
+This fully replicates C# M7 Registry pattern, adapted to Linux ephemeral filesystems. Ready for implementation and Newt QA sign-off.
+
+---

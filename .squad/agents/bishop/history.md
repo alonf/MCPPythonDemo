@@ -570,3 +570,127 @@ ALLOWED_PROC_ROOTS = [
 **Owners:** Ash (Python Dev), Dallas (Linux Diagnostics Expert), Bishop (Pattern Verification)
 
 **Link:** `.squad/decisions/inbox/bishop-m6-delta.md` (comprehensive spec)
+---
+
+## MILESTONE 7 ANALYSIS (2026-04-14T18:20:00Z)
+
+### Branch Archaeology: C# Milestone 7
+
+**Scope:** Roots & Sandboxing Architecture + Registry Tools
+
+**Code Delta (M6 → M7):**
+- **New Feature Lines:** ~775 LOC across 8 new files
+- **Tools Added:** 2 public MCP tools (`CreateRegistrySnapshotAsync`, `RequestRegistryAccessAsync`)
+- **Resources Added:** 2 resource endpoints (`registry://snapshot/{id}`, `registry://snapshot/{id}?limit=X&offset=Y`)
+- **Services Added:** `RegistryRootsService` (allow-list enforcement, default roots hardcoded)
+- **Storage Added:** `IRegistrySnapshotStorage` interface + in-memory implementation
+- **Prompts Added:** 1 new prompt (`RegistryTroubleshootingPromptType`) — no changes to M6 sampling prompt
+
+**Feature Map:**
+```
+┌─ REGISTRY DOMAIN (New in M7)
+│  ├─ Tool: create_registry_snapshot(hive, key, recursive?, maxDepth?, filter?)
+│  │  └─ Returns: registry://snapshot/{id} (resource URI)
+│  │  └─ Validates: path via RegistryRootsService.IsPathAllowed()
+│  ├─ Tool: request_registry_access(hive, key, reason?)
+│  │  └─ Uses: Elicitation (M5 pattern reused)
+│  │  └─ Effect: Adds path to RegistryRootsService allow-list
+│  ├─ Resource: registry://snapshot/{id} [read-only]
+│  │  └─ Schema: { Hive, Key, Values, SubKeys (hierarchical) }
+│  ├─ Resource: registry://snapshot/{id}?limit=50&offset=0 [paged]
+│  │  └─ Pagination: TotalCount, HasMore, NextOffset
+│  └─ Roots Service: Allow-list enforcement
+│     ├─ Default: HKLM\...\Uninstall, HKCU\...\Run (hardcoded)
+│     ├─ API: SetAllowedRoots(), AddAllowedRoot(), IsPathAllowed()
+│     └─ Storage: ConcurrentDictionary<id, RegistrySnapshotEntry>
+└─ WMI/SAMPLING (No Changes)
+   └─ M6 infrastructure reused; sampling remains active
+```
+
+**Key Architectural Insight:**
+- M7 is **structurally additive** (no changes to M6 tools, sampling, or transport)
+- **Pedagogical pivot:** M6 taught sampling; M7 teaches **sandboxing** (allowed-roots model)
+- **Elicitation integration:** Registry tool proactively requests permission *before* access fails
+- **Pattern reuse:** Elicitation from M5, snapshot/storage model from EventLog (M4), paging from new resource layer
+
+### Parity-Critical Invariants for Python
+
+1. **Two Public MCP Tools**
+   - `create_proc_snapshot(path: str, recursive?: bool, maxDepth?: int, filter?: str) → str` → returns `proc://snapshot/{id}`
+   - `request_proc_access(path: str, reason?: str) → bool` → uses elicitation
+
+2. **Allowed-Roots Enforcement**
+   - Must enforce **before** tool execution (not as post-hoc error)
+   - String-based prefix matching for `/proc/` and `/sys/` paths
+   - Default allow-list: hardcoded (e.g., `/proc/meminfo`, `/proc/cpuinfo`, `/proc/loadavg`, `/proc/sys/vm/`, `/proc/sys/net/`)
+   - Dynamic add via elicitation (via `request_proc_access`)
+
+3. **Resource Snapshots + Paging**
+   - Resource URI: `proc://snapshot/{id}`
+   - Query parameters: `?limit={1..500}&offset={>=0}`
+   - Pagination metadata: `TotalCount`, `ReturnedCount`, `HasMore`, `NextOffset`
+   - Default limit: 50; max: 500
+
+4. **Prompt Workflow**
+   - Guides user to **proactively call `request_proc_access`** if needed path is outside allow-list
+   - Does NOT wait for tool to fail; anticipates restrictions
+
+### Optional/Non-Critical Elements
+
+- Exact DTO structure (RegistryKeyDto hierarchy vs. flattened; Python may flatten by default)
+- Code organization patterns (C# uses `#region` markers; Python uses module structure)
+- Test/validation project (TestRoots is C#-only; Python may use pytest)
+- Chat client logging enhancements (tool discovery debug output)
+
+### Critical Non-Changes (Parity Preservation)
+
+- **Sampling:** M7 does NOT modify M6 sampling infrastructure. Sampling remains present but unused by Registry tools.
+- **Elicitation:** M7 reuses M5 elicitation pattern unchanged.
+- **Transport:** M7 maintains HTTP/streaming transport from M4; no changes.
+- **Event Log Tools:** All M4 tools remain unchanged and functional.
+
+### Python Implementation Guidance
+
+**Roots Validation Pattern (pseudocode):**
+```python
+ALLOWED_PROC_ROOTS = [
+    "/proc/meminfo",
+    "/proc/cpuinfo",
+    "/proc/loadavg",
+    "/proc/sys/vm/",
+    "/proc/sys/net/",
+]
+
+def is_path_allowed(path: str) -> bool:
+    # Strict: normalize and check prefix match
+    normalized = os.path.normpath(path)
+    # Reject traversal
+    if ".." in normalized:
+        return False
+    # Check allowlist
+    return any(normalized.startswith(root) for root in ALLOWED_PROC_ROOTS)
+```
+
+**Snapshot Storage Pattern (pseudocode):**
+```python
+# In-memory storage (session-scoped)
+snapshots = {}  # Dict[str, SnapshotEntry]
+
+def create_proc_snapshot(server, path: str, recursive: bool = False, ...) -> str:
+    if not is_path_allowed(path):
+        raise InvalidOperationException(f"Access denied. Path '{path}' not in allowed roots: {ALLOWED_PROC_ROOTS}")
+    
+    content = read_file(path)  # or traverse recursively
+    snapshot_id = uuid.uuid4().hex
+    snapshots[snapshot_id] = SnapshotEntry(path=path, json_content=json.dumps(content))
+    
+    return f"proc://snapshot/{snapshot_id}"
+```
+
+### Historical Decision Record
+
+**Decision:** Python M7 shall implement Registry-equivalent sandboxing for `/proc` and `/sys` with allowed-roots enforcement, elicitation-based access requests, and read-only resource snapshots with pagination.
+
+**Status:** DECISION WRITTEN TO `.squad/decisions/inbox/bishop-m7-delta.md`
+
+**Next Steps (for Ash):** Implement `ReadProcSnapshotTool` and `RequestProcAccessTool` with RegistryRootsService-equivalent validation.
