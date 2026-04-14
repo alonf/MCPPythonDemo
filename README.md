@@ -123,6 +123,8 @@ The lecture chat client that:
 | MCP Inspector | ✅ Yes | ✅ Yes | ❌ No | development, debugging, teaching |
 | `python3 -m mcp_linux_diag_server.client` | ❌ No | ✅ Yes | ✅ Yes | lecture demo flow |
 
+For a parity-focused Milestone 1 checklist, see [M1_VALIDATION_GUIDE.md](M1_VALIDATION_GUIDE.md).
+
 ## Project Structure
 
 ```text
