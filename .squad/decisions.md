@@ -1013,3 +1013,57 @@ It should **not** invent Foundry-project-specific config unless the team decides
 ### Important Nuance
 
 If the new user requirement is "use an actual Azure AI Foundry project/runtime," that remains a gap in the **source C# demo as well**, not just in Python.
+
+
+---
+
+## Milestone 2: Linux Process Diagnostics (2026-04-14)
+
+### D6: Process Data Source — Linux `/proc` (Not psutil)
+
+**Decision:** Implement Milestone 2 process inspection directly against Linux `/proc` instead of adding `psutil`.
+
+**Rationale:**
+- The milestone is Linux-focused; the repo already teaches kernel-facing diagnostics patterns
+- `/proc` keeps the dependency surface small while matching established project conventions
+- Direct kernel fs reads are pedagogically valuable (students learn what psutil abstracts)
+
+**Implication:** Process list, per-PID detail, and by-name paging stay portable across Ubuntu and WSL without introducing a new runtime requirement.
+
+**Owners:** Ash (Python Dev), Newt (Tester)
+
+**Status:** Ratified & Implemented
+
+---
+
+### D7: M2 Test Coverage Strategy — Dual Lanes
+
+**Decision:** Milestone 2 QA uses two automated lanes:
+1. Direct unit coverage of `/proc` parsing and edge case fallbacks
+2. SDK-driven stdio smoke coverage against a real subprocess for all three process tools
+
+**Rationale:**
+- Matches the agreed parity target (list, per-PID detail, by-name paging)
+- Stays reproducible on Linux/WSL without root or machine-specific assumptions
+- MCP wraps top-level list tool payloads under `structuredContent.result`, so smoke assertions account for transport shape
+
+**Owners:** Newt (Tester), Ash (Python Dev)
+
+**Status:** Ratified & Implemented
+
+---
+
+### D8: Branch Model for Public Milestones
+
+**Decision:**
+- Use the existing public Milestone 1 baseline commit for `milestone-1` branch
+- Keep both `milestone-2` and `master` on the squad-enabled follow-up state that adds only squad-operational support files
+
+**Rationale:**
+- Matches the C# demo naming model for active branches at this point in the lecture arc
+- Preserves a clean public M1 teaching snapshot on `milestone-1`
+- Gives the squad a ready-to-work `milestone-2` branch without pulling in M1 feature implementation
+
+**Owners:** Ripley (Lead), Ash (Python Dev), Newt (Tester)
+
+**Status:** Ratified & Implemented
