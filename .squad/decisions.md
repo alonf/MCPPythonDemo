@@ -1137,3 +1137,169 @@ Create `milestone-3` branch from clean `milestone-2` baseline. Track origin and 
 **Status:** Implemented — `milestone-3` created, pushed, worktree ready for M3 planning.
 
 **Owners:** Ripley (Lead)
+
+---
+
+## Milestone 4: HTTP Streamable Transport & Authentication (2026-04-14)
+
+### D11: M4 Transport Architecture — STDIO to HTTP with API Key Auth
+
+**Decision by:** Bishop (C# Parity Expert), Ash (Python Lead)  
+**Status:** Ratified & Validated  
+**Date:** 2026-04-14T14:30Z
+
+Transform Milestone 4 server from STDIO protocol transport to HTTP streamable transport with API key authentication.
+
+**Parity-Critical Implementation:**
+
+1. **HTTP Server Setup:**
+   - Replace STDIO transport with FastAPI HTTP listener on configurable port (default 5000)
+   - Mount MCP server at `/mcp` route prefix
+   - Support `Accept: application/json, text/event-stream` for streamable responses
+
+2. **API Key Authentication Middleware:**
+   - Accept `X-API-Key` header OR `apiKey` query parameter
+   - Validate against hardcoded `"secure-mcp-key"` (demo purposes; production would use config/env)
+   - Return `401 Unauthorized` for missing or invalid key
+   - Middleware applies only to `/mcp` routes
+
+3. **Session ID Tracking:**
+   - Generate unique session ID per request (handled by MCP SDK layer)
+   - Return `mcp-session-id` response header to client
+   - Client must pass session ID in subsequent requests
+   - HTTP stateless; no server-side session storage
+
+4. **Streamable Response Handling:**
+   - MCP SDK handles automatic streaming via FastAPI
+   - Response format supports both JSON and Server-Sent Events (SSE)
+   - Python test scripts parse SSE format if responses wrapped in `data:` lines
+
+**Optional/Convenience Enhancements (Not Required for Parity):**
+- Custom logging formatter with color-coded method names (tools/resources/prompts/sampling)
+- Helper function for HTTP request orchestration (Python equivalent of PowerShell functions)
+- Documentation polish explaining HTTP workflow to students
+
+**No New MCP Features:** All tools, resources, prompts from M1–M3 unchanged. Transport-only milestone.
+
+**Python M4 Scope Estimate:** 150–200 lines core changes (FastAPI setup, middleware, session plumbing) + optional logging enhancements.
+
+**Test Validation:**
+- Raw HTTP lane: API key enforcement, session ID behavior, auth errors
+- SDK lane: tool/resource/prompt reachability unchanged over `/mcp`
+- Both lanes use ephemeral ports (no fixed 5000 dependency)
+
+**Owners:** Ash (Python implementation), Bishop (C# parity oversight), Newt (Validation), Ripley (Lead)
+
+**Evidence Files (C# Source):**
+- `WinDiagMcpServer/Program.cs` (transport setup, middleware registration)
+- `WinDiagMcpServer/Middleware/ApiKeyAuthMiddleware.cs` (API key validation)
+- `.vscode/mcp.json` (HTTP client config)
+- `test-mcp-server.ps1` (HTTP POST testing patterns)
+
+---
+
+### D12: M4 HTTP Constants Centralization & Dual-Lane Validation
+
+**Decision by:** Ash (Python Lead)  
+**Status:** Ratified & Validated  
+**Date:** 2026-04-14T14:45Z
+
+Centralize HTTP transport constants in single Python module and validate M4 via two explicit verification lanes.
+
+**Rationale:**
+- Transport delta is the Milestone 4 teaching feature; auth and session headers need direct verification, not just SDK abstraction
+- M1–M3 parity promise is behavioral; old smoke assertions still apply after transport switch
+- Shared constants avoid drift between server code, test scripts, client config, and lecture materials
+
+**Implementation Shape:**
+
+1. **`http_config.py` Constants Module:**
+   - `MCP_HOST`, `MCP_PORT`, `MCP_PATH`, `MCP_API_KEY` (shared across server, tests, client)
+   - Single source of truth for HTTP transport parameters
+
+2. **`server.py` HTTP Setup:**
+   - FastAPI app with `/mcp` route prefix
+   - Lightweight API-key middleware wrapping MCP streamable HTTP transport
+
+3. **`client.py` Subprocess Launch:**
+   - Spawns server as local HTTP subprocess
+   - Connects via `streamable_http_client(url, api_key)`
+   - Manages lifecycle (startup, shutdown, port cleanup)
+
+4. **Dual-Lane Validation:**
+   - **Raw HTTP lane:** Direct HTTP POST to `/mcp`, verify 401 on missing key, validate session ID header
+   - **SDK lane:** Verify tools/resources/prompts reachable via MCP client library over HTTP
+
+**Outcome:** Smoke tests, validation harnesses, and demo scripts all read from single constants module; drift eliminated.
+
+**Owners:** Ash (Python implementation), Newt (Validation framework), Ripley (Lead)
+
+---
+
+### D13: M4 Validation — Ephemeral Ports & Transport-Specific Assertions
+
+**Decision by:** Newt (QA Lead)  
+**Status:** Ratified & Validated  
+**Date:** 2026-04-14T15:00Z
+
+Validate Milestone 4 HTTP transport using ephemeral (dynamically allocated) ports and explicit transport-layer assertions.
+
+**Rationale:**
+- Fixed port (5000) causes collisions during local QA and parallel validation runs
+- Raw HTTP checks catch transport regressions SDK abstraction can hide
+- SDK coverage remains because students use transport through MCP client library, not handwritten HTTP
+
+**Validation Lanes:**
+
+1. **Raw HTTP Transport Checks:**
+   - Missing API key → `401 Unauthorized`
+   - Valid `apiKey` query parameter accepted
+   - `X-API-Key` header accepted as alternative
+   - `mcp-session-id` required in subsequent requests after initialize
+   - Response includes `mcp-session-id` header on all requests
+
+2. **SDK Compatibility Checks:**
+   - Tools (get_system_info, get_all_processes, get_process_detail) reachable over `/mcp`
+   - Resources (syslog://*, processes://*, etc.) paginated correctly
+   - Prompts return plain-text guides
+   - Snapshot creation and pagination work end-to-end
+
+**Implementation:**
+- `tests/test_m4_http.py` covers transport and auth assertions
+- `scripts/smoke_test.py` validates both raw HTTP and SDK layers
+- Server spawned on free local port; port passed explicitly to tests
+- Graceful server shutdown and port cleanup after validation
+
+**Outcome:** All M4 validation passed end-to-end; transport regressions caught at raw HTTP layer; SDK coverage confirms M1–M3 parity maintained.
+
+**Owners:** Newt (Validation), Ash (Implementation), Ripley (Lead)
+
+**Status:** Implemented & Passing
+
+---
+
+### D14: M4 Branch Model
+
+**Decision by:** Ripley  
+**Status:** Ratified & Implemented  
+**Date:** 2026-04-14T15:15Z
+
+Create `milestone-4` branch from clean `milestone-3` baseline (commit 3b3c09e: "Consolidate Milestone 3 squad memory for Milestone 4").
+
+**Rationale:**
+- Follows established 7-milestone progression per D1
+- Clean branching point with full M3 squad memory and implementation
+- Enables parallel M5+ planning without disturbing M3 or M2 branches
+- Reproduces deterministically: any team member can recreate from same baseline
+
+**Implementation:**
+- Local branch: `git checkout -b milestone-4`
+- Remote: `git push -u origin milestone-4`
+- Tracking: automatic
+- Worktree: ready for M4 planning and implementation
+
+**Outcome:** `milestone-4` branch created and pushed to origin; clean state for M4 team; ready for publication wrap-up.
+
+**Owners:** Ripley (Lead)
+
+**Status:** Implemented

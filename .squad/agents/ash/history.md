@@ -285,3 +285,20 @@ D6, D7, D8 from decision inbox merged:
 - Session log saved: `.squad/log/2026-04-14T13:00:00Z-milestone-2-delivery.md`
 - Cross-agent history appended to agent files
 - Ready for publication or M3 planning
+
+---
+
+## Team Updates (2026-04-14T14:55:00Z — Milestone 4 HTTP Parity)
+
+### Milestone 4 Transport Parity Complete ✅
+
+- Switched the runnable Python MCP server from stdio-first to authenticated streamable HTTP on `/mcp`
+- Added demo API key validation for both `X-API-Key` and `?apiKey=...`
+- Kept the Milestone 1-3 tool, resource, and prompt registrations unchanged
+- Updated the lecture client to launch the local HTTP server and connect through the MCP SDK's HTTP transport
+
+### Validation Learnings
+
+- The Python MCP SDK already preserves `mcp-session-id` correctly for HTTP clients, so the main parity work is making sure the first initialize response is authenticated and allowed through unchanged.
+- Reviewer-grade M4 validation needs two lanes: a raw HTTP lane for `401`/session-header behavior and an SDK lane for the unchanged M1-M3 tool, resource, and prompt surface.
+- Using a tiny shared HTTP config module keeps the server, lecture client, smoke script, and inspector config aligned on host, port, route, and demo key without drifting.

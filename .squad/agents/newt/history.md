@@ -115,3 +115,15 @@ D6, D7, D8 from decision inbox merged:
 - Session log saved: `.squad/log/2026-04-14T13:00:00Z-milestone-2-delivery.md`
 - Cross-agent history appended to agent files
 - Ready for publication or M3 planning
+
+---
+
+## Team Updates (2026-04-14T13:50:00Z — Milestone 4 QA Validation)
+
+### Milestone 4 HTTP Transport Validated ✅
+
+- Added explicit M4 transport coverage in `tests/test_m4_http.py` for auth rejection, query-string auth, session-header enforcement, and end-to-end M1-M3 surface reachability over `/mcp`.
+- Confirmed existing milestone smoke tests (`tests/test_m1_smoke.py`, `tests/test_m2_smoke.py`, `tests/test_m3_smoke.py`) now exercise the HTTP transport via a reusable free-port harness instead of stdio-only launch assumptions.
+- Updated `scripts/smoke_test.py` to run raw HTTP checks plus SDK-backed HTTP checks on an ephemeral port, which avoids false failures from local port-5000 collisions.
+- Validation result: `python3 -m unittest discover -s tests -v` passed (46 tests) and `python3 scripts/smoke_test.py` passed.
+- Reviewer-grade issues found: none. The branch currently meets the M4 target claims that were exercised.

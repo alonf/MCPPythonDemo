@@ -232,3 +232,92 @@ Correction documented in: .squad/decisions/inbox/bishop-m1-corrected-branch-spec
 **Migration Decision:** All three components parity-critical for M3; chat client deferred.
 
 **Decision documented to:** `.squad/decisions/inbox/bishop-m3-delta.md` (comprehensive spec, 13.9KB)
+
+---
+
+## Learnings (2026-04-14T14:30Z M4 Delta Analysis: Transport Layer Transformation)
+
+### C# Milestone 4 Core Delta: STDIO → HTTP Streaming
+
+**Question:** What does C# M4 add to M1–3?  
+**Answer:** Transport mechanism change only; no new server features.
+
+**Evidence (Comparative Branch Inspection):**
+
+1. **Host Framework Swap:**
+   - M3: `Host.CreateApplicationBuilder(args)` → generic host, no HTTP
+   - M4: `WebApplication.CreateBuilder(args)` → web-specific host with routing, middleware
+
+2. **Transport Registration:**
+   - M3: `.WithStdioServerTransport()` → STDIO pipes
+   - M4: `.WithHttpTransport()` → HTTP streaming (MCP SDK handles details)
+
+3. **Server Startup:**
+   - M3: `await app.RunAsync()` → no port specified
+   - M4: `await app.RunAsync("http://localhost:5000")` → explicit HTTP listener
+
+4. **Route & Authentication:**
+   - M3: (not applicable, STDIO has no routes)
+   - M4: `app.MapMcp("/mcp")` + middleware validating `X-API-Key` header or `apiKey` query param
+
+5. **Dependencies:**
+   - M3: `Microsoft.Extensions.Hosting`
+   - M4: `-Hosting` (removed), `+Microsoft.AspNetCore.App` (framework ref), `+ModelContextProtocol.AspNetCore`
+
+6. **Tools & Resources (unchanged):**
+   - M3 & M4 both have: `get_system_info`, `get_process_list`, event log tools, resources, prompts
+   - No new tools, no behavioral changes to existing tools
+
+**Code Size Impact:**
+- Program.cs: 47 lines → 65 lines (+18, due to middleware + route setup)
+- New file: McpConsoleFormatter.cs (117 lines, optional pedagogical enhancement)
+- test-mcp-server.ps1: 60 → 200+ lines (HTTP POST logic replaces mcp-cli invocation)
+- launch-inspector.ps1: 70 → 90 lines (process mgmt + HTTP endpoint passing)
+
+**Architecture Pattern:**
+- M1–3: "Protocol learner sees single tool, then resources, then prompts" (all via STDIO)
+- M4: "Protocol learner now sees the *same features* delivered over HTTP instead of pipes"
+- Pedagogical goal: Transport-independent protocol design
+
+### Configuration & Test Script Implications
+
+**Breaking Changes (M3 → M4):**
+- `server_config.json` is removed (M4 uses code-driven config)
+- `setup-claude-desktop.ps1`, `setup-claude-desktop.sh` removed (Claude Desktop requires integration update for HTTP)
+- `mcp-cli` test approach abandoned in favor of native HTTP POST
+
+**Test Pattern Shift:**
+- M3: CLI-based (`mcp-cli tools`, `mcp-cli cmd`) via external process
+- M4: HTTP POST with session ID tracking + SSE parsing
+- Rationale: CLI tools abstract transport; HTTP requires understanding of stateless request/response cycles
+
+**MCP Inspector Integration:**
+- M3: `mcp-inspector -- dotnet run ...` (STDIO subprocess transport)
+- M4: Server starts separately; inspector connects to `http://localhost:5000/mcp` with API key in header
+- Implication: Instructor must explain multi-process debugging (server + inspector)
+
+### Decision Extracted
+
+**Parity-Critical for Python M4:**
+1. HTTP listener on `/mcp` route
+2. API key authentication (hardcoded `"secure-mcp-key"` for demo)
+3. Session ID tracking via response headers
+4. Test scripts that POST to `/mcp` with session ID
+5. launcher script that separates server startup from inspector connection
+
+**Optional Enhancements:**
+1. Custom logging formatter with colored method names
+2. PowerShell-to-Python helper function equivalents
+
+**Not Goals:**
+1. Claude Desktop setup (deferred to M5 after HTTP integration maturity)
+2. Config files or environment-driven port binding (M5+)
+3. Foundry project abstraction (M6+)
+
+### Upstream Alignment
+
+- C# M4 is transport-only; Python M4 should mirror this scope exactly
+- No pedagogical divergence; both see "same protocol over different pipes"
+- Migration risk: Low (straightforward FastAPI setup + middleware)
+
+**Decision documented to:** `.squad/decisions/inbox/bishop-m4-delta.md` (16.6KB comprehensive spec with appendix)

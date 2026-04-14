@@ -47,3 +47,31 @@
 - Pushed `milestone-3` to origin with tracking set up.
 - Worktree left safely on `milestone-3`.
 - No implementation started; ready for M3 planning phase.
+
+## Action (2026-04-14 Milestone 3 → 4 Handoff)
+
+- Pushed `milestone-3` tip (3b3c09e: "Consolidate Milestone 3 squad memory for Milestone 4") to `origin/milestone-3`
+- Verified no local commits remain ahead of remote
+- Documented M4 base commit in `.squad/decisions/inbox/ripley-m4-base.md`
+- Squad history fully preserved and accessible for M4 team planning
+- **Key learning:** Always consolidate `.squad` memory as final M-N commit before M+1 branching to ensure continuity and prevent context loss
+
+## Action (2026-04-14 Milestone 4 Branch Creation)
+
+- Created local `milestone-4` branch from clean `milestone-3` baseline (3b3c09e)
+- Pushed to origin with upstream tracking configured
+- Worktree left safely on `milestone-4` ready for M4 planning
+- Branch model confirmed: public milestone branches remain immutable teaching snapshots while squad operates on forward branches
+- **Key learning:** Preserve branch isolation by never pushing squad-only changes backward; always consolidate memory before branching forward
+
+## Action (2026-04-14 Milestone 4 Implementation & Publish)
+
+- HTTP transport implementation: Ash delivered streamable HTTP server on `/mcp` endpoint
+- API key auth: HTTP header + query-string support with demo key for testing
+- Session tracking: mcp-session-id header enables stateless correlation across requests
+- Test coverage: http_harness.py + test_m4_http.py provide reusable lifecycle patterns
+- Refactored client.py for HTTP endpoint discovery; server.py supports both STDIO + HTTP simultaneously
+- Smoke test updated to exercise full HTTP flow with session tracking verification
+- Commit 8df0227 published to origin/milestone-4
+- **Key learning:** Multi-protocol server architecture enables testing flexibility. Shared transport config (http_config.py) reduces duplication and improves maintainability. Session tracking via headers is the right pattern for stateless HTTP-based MCP servers.
+- **Pedagogical value:** HTTP transport demystifies how MCP can reach web-based clients. Auth patterns show production concerns. Stateless session IDs teach distributed systems thinking.
