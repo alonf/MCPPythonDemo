@@ -1,0 +1,22 @@
+# Local-only repo helpers
+.copilot/
+.squad/
+MCPDemo_upstream/
+
+# Python project artifacts
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.env.local
+.env.*.local
+!.env.example
+
+# Public repo hygiene
+NUL
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.tmp
+*.bak

@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mcp-linux-diag-server"
+version = "0.1.0"
+description = "Milestone 1 Linux diagnostics MCP server plus lecture chat client for the Season of AI teaching arc."
+readme = "README.md"
+license = { file = "LICENSE.txt" }
+requires-python = ">=3.12"
+authors = [
+  { name = "Alon Fliess" },
+]
+dependencies = [
+  "mcp[cli]>=1.27.0,<2.0",
+]
+
+[project.optional-dependencies]
+llm = [
+  "azure-identity>=1.17.0,<2.0",
+  "openai>=1.75.0,<2.0",
+]
+
+[project.scripts]
+mcp-linux-diag-server = "mcp_linux_diag_server.__main__:main"
+mcp-linux-diag-chat = "mcp_linux_diag_server.client:main"
+
+[project.urls]
+Homepage = "https://github.com/alonf/MCPPythonDemo"
+Repository = "https://github.com/alonf/MCPPythonDemo"
+Documentation = "https://github.com/alonf/MCPPythonDemo/tree/main/docs"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
