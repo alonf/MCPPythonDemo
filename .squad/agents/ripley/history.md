@@ -85,3 +85,15 @@
 - Documented branch model stability and M5 scope hint in `.squad/decisions/inbox/ripley-m5-branch.md`
 - **Key learning:** Clean branch advancement with consolidated memory prevents context loss at milestone boundaries. Squad history is the team's institutional knowledge—consolidate aggressively before forward branching.
 - **Branch strategy confirmed:** Teaching arc (master + immutable milestones) + forward branch (current milestone) maintains pedagogical integrity while enabling squad work without retrospective coupling.
+
+## Action (2026-04-14 Milestone 5 Implementation & Publish)
+
+- Elicitation-gated process control: `kill_process` tool with CONFIRM PID {pid} protocol
+- HTTP server enforces elicitation capability barrier before termination; safe rejection when unsupported
+- Client-side elicitation: lecture client display of prompts and elicitation flow with local terminal interaction
+- Full test coverage: 53 tests passed; smoke test validates kill_process safety and success lanes
+- Reviewer Newt acceptance: "Accept Milestone 5 as currently implemented" on evidence of exact M5 contract parity
+- Committed bec880e to `origin/milestone-5` with full squad artifacts and implementation depth
+- Master remains pinned at M4 baseline (992058e) per pedagogical branch model
+- **Key learning:** Elicitation is the pedagogical centerpiece of M5. The team correctly prioritized server-side enforcement + client capability negotiation as the pattern; this teaches defensive distributed-system thinking. Session IDs + confirmation phrases bridge stateless HTTP with user intent.
+- **Pedagogical value:** Kill operations on M5 enforce the core MCP pattern: tools define what's possible, but elicitation gates what's allowed. This is essential for production safety and teaches students the difference between capability and authority.
