@@ -164,3 +164,13 @@
 - Documented M6 publication decision in `.squad/decisions/inbox/ripley-m6-publish.md`
 - **Key learning:** M6 closes the sampling + session pattern space. Bridge pattern is the architectural win: shared session identity enables progressive stateful tools across protocols. This is production-ready teaching material for distributed systems.
 - **Pedagogical value:** Sampling teaches incremental data collection and session management. Progressive UI teaches how MCP tools can evolve context. Bridge pattern teaches multi-protocol state abstraction—critical for production MCP deployments.
+
+## Action (2026-04-14 Milestone 6 → 7 Handoff)
+
+- Consolidated final M6 squad state: committed full inbox artifacts (rename fixes, reviews, corrections) + updated history
+- Verified M6 base: commit ae0fede ("Consolidate Milestone 6 squad memory for Milestone 7 branching") pushed to `origin/milestone-6`
+- Created `milestone-7` branch from clean M6 baseline (ae0fede) with upstream tracking configured
+- Pushed `milestone-7` to origin; worktree safely parked on M7 ready for M7 planning phase
+- Documented M7 branch decision in `.squad/decisions/inbox/ripley-m7-branch.md`
+- **Key learning:** Consolidation pattern (M4 → M5 → M6 → M7) proven resilient. Squad state inheritance via branch base ensures no context loss. Branch model sustains teaching arc while enabling forward work.
+- **Branch strategy affirmed:** Immutable teaching branches (master + milestone-N) + forward working branch (next milestone) maintains pedagogical integrity and operational clarity across team transitions.
