@@ -141,3 +141,25 @@ D6, D7, D8 from decision inbox merged:
 - Updated `scripts/smoke_test.py` to run raw HTTP checks plus SDK-backed HTTP checks on an ephemeral port, which avoids false failures from local port-5000 collisions.
 - Validation result: `python3 -m unittest discover -s tests -v` passed (46 tests) and `python3 scripts/smoke_test.py` passed.
 - Reviewer-grade issues found: none. The branch currently meets the M4 target claims that were exercised.
+
+---
+
+## Team Updates (2026-04-14T16:04:52Z — Milestone 7 Validation & Approval)
+
+### Milestone 7 Validation Complete ✅
+
+- Created comprehensive M7 validation coverage for proc/sys snapshot subsystem
+- **Initial Review:** Rejected first forbidden-path candidate implementation for leakage risk
+- **Re-Review:** Approved revised artifact after Dallas tightened forbidden proc/sys class checks
+- Validation lanes verified:
+  - `python3 -m unittest tests.test_proc_snapshots tests.test_m7_http -q` ✓
+  - `python3 -m unittest discover -s tests -q` ✓ (all tests passing)
+  - `python3 scripts/smoke_test.py` ✓ (end-to-end validation)
+- Direct evidence: Forbidden `/proc/kcore` correctly raises `ValueError`; `ProcRootsService.add_allowed_root()` short-circuits on forbidden classes
+- **Approved:** M7 revision ready for publication
+
+### Delivery Milestone Complete
+
+- M7 teaching progression complete: roots/sandbox pattern mirrors C# final milestone
+- Validation gates passed; no blocker issues found in reviewed scope
+- Ready for Ripley publication & branch alignment

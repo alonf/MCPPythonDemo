@@ -184,3 +184,28 @@
 - Published the final M7 state by committing on `master` and aligning `milestone-7` to the same final tip.
 - Decision recorded in `.squad/decisions/inbox/ripley-m7-publish.md`.
 - **Key learning:** The final milestone changes the branch rule. Once the teaching arc is complete, duplicated tip commits are noise; a shared final commit on `master` and `milestone-7` is the clearest release state.
+
+---
+
+## Team Updates (2026-04-14T16:04:52Z — Milestone 7 Publication & Completion)
+
+### Milestone 7 Committed & Published ✅
+
+- **Approval Chain Complete:** Ash (impl) → Dallas (safety) → Newt (validation) → Ripley (publication)
+- **Final Commit:** a9a675a9f09882766289061582d947e0add1bb28
+- Revised artifact approved by Newt after tightened forbidden-path checks by Dallas
+- Full validation lanes green: proc/sys tests, full unit discovery, smoke test
+- **Branch Alignment:** `master` and `milestone-7` now point to same final tip (no separate teaching branches needed after M7)
+- **Publication Decision:** One shared final commit represents repository state clearly—Milestone 7 is the final product, master is the stable endpoint
+
+### Pedagogical Arc Complete
+
+- M1: STDIO MCP server + system info tool (foundational)
+- M2: Process listing + psutil integration (domain expansion)
+- M3: Event logs + resources + prompts (state management pattern)
+- M4: HTTP transport + authentication (protocol scaling)
+- M5: Process termination + elicitation (user interaction pattern)
+- M6: Sampling + session bridge (distributed stateful tools)
+- M7: Roots/proc snapshots + sandbox pattern (final teaching slice)
+
+**Repository narrative complete.** MCPPythonDemo is now a complete teaching artifact demonstrating MCP pedagogical progression from single-tool STDIO servers to multi-protocol, stateful, sandboxed resource systems.

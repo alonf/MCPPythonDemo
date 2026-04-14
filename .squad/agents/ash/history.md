@@ -327,3 +327,22 @@ D6, D7, D8 from decision inbox merged:
 
 - Milestone names are fine for branch/docs planning, but Python module filenames should stay domain-based so imports remain stable after the milestone is complete.
 - For rename-only follow-ups, a fast repo-wide search before and after the move is the cleanest way to prove package exports, tests, and teaching docs all stayed aligned.
+
+---
+
+## Team Updates (2026-04-14T16:04:52Z — Milestone 7 Delivery Complete)
+
+### Ash: Milestone 7 Implementation ✅
+
+- Implemented proc/sys snapshot subsystem as separate tool set (instead of modifying M6 sampling validator)
+- Reused proven snapshot/resource UX from M3 log snapshots with domain-specific adaptation
+- Key files: `src/mcp_linux_diag_server/tools/proc_snapshots.py`, server/client wiring, smoke test, unit and integration tests
+- Safety: Centralized allowed-root enforcement, traversal rejection, and symlink-escape prevention before any proc/sys read
+- Final commit approved by Dallas (safety), Newt (validation), and Ripley (lead)
+- **Shipped:** a9a675a9f09882766289061582d947e0add1bb28 on both `master` and `milestone-7`
+
+### Delivery Chain Completed
+
+- Ash → Dallas (safety audit) → Newt (validation) → Ripley (publication & branch alignment)
+- Final endpoint: pedagogical progression complete, repo narrative clear
+- M7 is the final teaching artifact; master and milestone-7 now unified

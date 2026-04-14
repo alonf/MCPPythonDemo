@@ -473,3 +473,21 @@ Implement M7 proc_snapshots module using:
 This fully replicates C# M7 Registry pattern, adapted to Linux ephemeral filesystems. Ready for implementation and Newt QA sign-off.
 
 ---
+
+## Team Updates (2026-04-14T16:04:52Z — Milestone 7 Delivery Complete)
+
+### Dallas: Milestone 7 Safety Rules & Forbidden-Path Enforcement ✅
+
+- Authored Linux M7 safety rules with forbidden proc/sys class identification
+- **First Review:** Initial forbidden-path candidate rejected by Newt for leakage risk
+- **Revision:** Tightened forbidden proc/sys class identification and validation
+- Ensured allowed-root allowlist expansion doesn't bypass sandbox constraints
+- Safety audit verified: forbidden paths reject before snapshot creation, elicitation, and allowlist expansion
+- Short-circuit enforcement in `ProcRootsService.add_allowed_root()` prevents bypass attempts
+- **Shipped:** Revised artifact approved and committed in a9a675a9f09882766289061582d947e0add1bb28
+
+### Delivery Impact
+
+- M7 pedagogical pattern complete: roots/snapshot/allowlist-gating mirrors C# Registry model
+- Linux adaptation proved race-tolerance approach + ephemeral filesystem constraints are teachable
+- Safety rules established as foundation for future M8+ expansions
