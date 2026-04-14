@@ -15,6 +15,6 @@
 
 ## Repo Example
 
-- `src/mcp_linux_diag_server/tools/m6_diagnostics.py`
+- `src/mcp_linux_diag_server/tools/linux_diagnostics.py`
 - `src/mcp_linux_diag_server/client.py`
 - `tests/test_linux_diagnostics.py`

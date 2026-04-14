@@ -14,7 +14,7 @@ from .processes import (
     list_processes,
     sample_top_cpu_processes,
 )
-from .m6_diagnostics import (
+from .linux_diagnostics import (
     LinuxDiagnosticObservation,
     LinuxDiagnosticQuery,
     extract_sampling_text,

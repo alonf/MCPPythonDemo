@@ -308,3 +308,18 @@ D6, D7, D8 from decision inbox merged:
 - Reviewer-grade M4 validation needs two lanes: a raw HTTP lane for `401`/session-header behavior and an SDK lane for the unchanged M1-M3 tool, resource, and prompt surface.
 - Using a tiny shared HTTP config module keeps the server, lecture client, smoke script, and inspector config aligned on host, port, route, and demo key without drifting.
 - Milestone 6's live sampling contract is a single plain-text target (`PATH` or `PATH | grep FIELD`); when smoke/test fixtures drift back to JSON, the server correctly rejects them and the published smoke lane breaks even though the feature itself is intact.
+
+---
+
+## Team Updates (2026-04-14T12:56:18Z — M6 naming-rule follow-up)
+
+### Ash: Milestone-labeled module rename applied ✅
+
+- Renamed `src/mcp_linux_diag_server/tools/m6_diagnostics.py` to the domain-based `src/mcp_linux_diag_server/tools/linux_diagnostics.py`
+- Updated package exports, test imports, and the sampling-bridge skill reference so no live repo references still point at the milestone-labeled module path
+- Kept the public MCP surface unchanged (`troubleshoot_linux_diagnostics`, validation helpers, smoke flow), so this stayed a corrective follow-up instead of new feature work
+
+### Useful Learnings
+
+- Milestone names are fine for branch/docs planning, but Python module filenames should stay domain-based so imports remain stable after the milestone is complete.
+- For rename-only follow-ups, a fast repo-wide search before and after the move is the cleanest way to prove package exports, tests, and teaching docs all stayed aligned.

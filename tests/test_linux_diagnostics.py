@@ -5,7 +5,7 @@ import unittest
 
 import mcp.types as types
 
-from mcp_linux_diag_server.tools.m6_diagnostics import LinuxDiagnosticQuery, validate_linux_diagnostic_query
+from mcp_linux_diag_server.tools.linux_diagnostics import LinuxDiagnosticQuery, validate_linux_diagnostic_query
 from tests.http_harness import open_session, running_server
 
 

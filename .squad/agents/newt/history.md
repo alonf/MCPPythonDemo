@@ -26,6 +26,7 @@
 - QA still cannot accept M6 unless the published smoke lane agrees with the implementation contract; this branch's `scripts/smoke_test.py` still feeds JSON (`{"path": ...}`) into a validator that now only accepts `PATH` or `PATH | grep FIELD`, so the documented smoke command fails even though the unit suite is green.
 - Final M6 re-review passed once the smoke harness sampled the real contract (`/proc/...` or `/proc/... | grep FIELD`); acceptance evidence is now concrete: `python3 -m unittest discover -s tests -q` passed with 60 tests and `python3 scripts/smoke_test.py` completed green with the diagnostics lane exercising `troubleshoot_linux_diagnostics`.
 - Reviewer-grade M6 acceptance depends on both parity surface and runnable proof: tool discovery, prompt discovery, client sampling support, validation/retry coverage, and the published smoke command must all agree on the same sampling callback contract.
+- Rename-only follow-ups still need runnable proof: verify the milestone-labeled module path is gone from live code (`src/`, `tests/`, `scripts/`, docs/skills), confirm the domain-based import path loads through package exports, and rerun the full M6 regression lane (`python3 -m unittest discover -s tests -q` plus `python3 scripts/smoke_test.py`) before accepting the branch state.
 
 ---
 

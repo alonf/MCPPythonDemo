@@ -1,4 +1,4 @@
-"""Sampling-assisted Linux diagnostics for Milestone 6."""
+"""Sampling-assisted Linux diagnostics helpers."""
 
 from __future__ import annotations
 
