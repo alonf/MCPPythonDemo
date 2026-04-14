@@ -128,7 +128,7 @@ The lecture chat client that:
 ```text
 MCPPythonDemo/
 ├── README.md
-├── LICENSE
+├── LICENSE.txt
 ├── pyproject.toml
 ├── .env.example
 ├── scripts/
@@ -164,7 +164,7 @@ This repo does **not** claim feature parity with the later C# milestones yet.
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT. See [LICENSE.txt](LICENSE.txt).
 
 ## Resources
 
