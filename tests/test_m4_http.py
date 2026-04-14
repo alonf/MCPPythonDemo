@@ -120,7 +120,9 @@ class M4HttpTransportTests(unittest.TestCase):
             tool_names = {tool["name"] for tool in good_body["result"]["tools"]}
             self.assertIn("get_system_info", tool_names)
             self.assertIn("create_log_snapshot", tool_names)
+            self.assertIn("create_proc_snapshot", tool_names)
             self.assertIn("kill_process", tool_names)
+            self.assertIn("request_proc_access", tool_names)
 
         self.run_with_server(assertion)
 
@@ -138,7 +140,9 @@ class M4HttpTransportTests(unittest.TestCase):
                     "get_process_by_id",
                     "get_process_by_name",
                     "create_log_snapshot",
+                    "create_proc_snapshot",
                     "kill_process",
+                    "request_proc_access",
                 }.issubset(tool_names)
             )
 
@@ -158,6 +162,8 @@ class M4HttpTransportTests(unittest.TestCase):
             template_uris = {template.uriTemplate for template in templates.resourceTemplates}
             self.assertIn("syslog://snapshot/{snapshot_id}", template_uris)
             self.assertIn("syslog://snapshot/{snapshot_id}?limit={limit}&offset={offset}", template_uris)
+            self.assertIn("proc://snapshot/{snapshot_id}", template_uris)
+            self.assertIn("proc://snapshot/{snapshot_id}?limit={limit}&offset={offset}", template_uris)
 
             system_result = await session.call_tool("get_system_info", {})
             self.assertFalse(system_result.isError)

@@ -1,4 +1,4 @@
-"""Interactive lecture chat client for the Milestone 6 MCP server."""
+"""Interactive lecture chat client for the Milestone 7 MCP server."""
 
 from __future__ import annotations
 
@@ -31,6 +31,8 @@ DEFAULT_SYSTEM_PROMPT = (
     "or get_process_by_name for detail. "
     "When the user asks for deeper kernel, memory, CPU, or /proc-/sys-oriented troubleshooting, "
     "prefer troubleshoot_linux_diagnostics over a broad health summary. "
+    "If you need a direct /proc or /sys snapshot outside the default roots, call request_proc_access "
+    "before create_proc_snapshot. "
     "If the user wants to terminate a process, use kill_process and let the server drive "
     "the confirmation workflow. Never invent a PID when the user wants to choose interactively. "
     "When you need a guided workflow, call list_prompts and then get_prompt. "
@@ -811,7 +813,7 @@ async def run_chat(
 
 def build_parser() -> argparse.ArgumentParser:
     """Create the CLI parser for the lecture chat client."""
-    parser = argparse.ArgumentParser(description="Run the Milestone 6 Azure OpenAI chat client.")
+    parser = argparse.ArgumentParser(description="Run the Milestone 7 Azure OpenAI chat client.")
     parser.add_argument("question", nargs="?", help="Optional single prompt to run instead of interactive mode.")
     parser.add_argument("--prompt", help="Alias for the positional question argument.")
     parser.add_argument("--json", action="store_true", help="Emit single-prompt output as JSON.")

@@ -237,7 +237,9 @@ async def _run_sdk_http_checks(*, port: int) -> dict[str, Any]:
                     "get_process_by_id",
                     "get_process_by_name",
                     "create_log_snapshot",
+                    "create_proc_snapshot",
                     "kill_process",
+                    "request_proc_access",
                     "troubleshoot_linux_diagnostics",
                 }
                 if not expected_tools.issubset(tool_names):
@@ -259,6 +261,8 @@ async def _run_sdk_http_checks(*, port: int) -> dict[str, Any]:
                 resource_templates = await session.list_resource_templates()
                 template_uris = {template.uriTemplate for template in resource_templates.resourceTemplates}
                 expected_templates = {
+                    "proc://snapshot/{snapshot_id}",
+                    "proc://snapshot/{snapshot_id}?limit={limit}&offset={offset}",
                     "syslog://snapshot/{snapshot_id}",
                     "syslog://snapshot/{snapshot_id}?limit={limit}&offset={offset}",
                 }
@@ -319,6 +323,22 @@ async def _run_sdk_http_checks(*, port: int) -> dict[str, Any]:
                 if '"pagination"' not in rendered_snapshot:
                     raise RuntimeError("Expected log snapshot resource to include pagination metadata")
 
+                proc_snapshot_result = await session.call_tool("create_proc_snapshot", {"path": "/proc/meminfo"})
+                if proc_snapshot_result.isError:
+                    raise RuntimeError(f"Proc snapshot tool failed: {proc_snapshot_result.content}")
+                proc_snapshot_payload = proc_snapshot_result.structuredContent
+                if not isinstance(proc_snapshot_payload, dict) or "resource_uri" not in proc_snapshot_payload:
+                    raise RuntimeError("Expected create_proc_snapshot to return a resource URI")
+
+                proc_resource_result = await session.read_resource(proc_snapshot_payload["resource_uri"])
+                rendered_proc_snapshot = proc_resource_result.contents[0].text
+                if '"pagination"' not in rendered_proc_snapshot or '"/proc/meminfo"' not in rendered_proc_snapshot:
+                    raise RuntimeError("Expected proc snapshot resource to include pagination metadata and path context")
+
+                proc_access_result = await session.call_tool("request_proc_access", {"path": "/proc/meminfo"})
+                if proc_access_result.isError:
+                    raise RuntimeError(f"request_proc_access should succeed for an already allowed path: {proc_access_result.content}")
+
                 kill_result = await session.call_tool("kill_process", {"process_id": 999999})
                 if not kill_result.isError:
                     raise RuntimeError("Expected kill_process to fail safely without elicitation support")
@@ -345,6 +365,8 @@ async def _run_sdk_http_checks(*, port: int) -> dict[str, Any]:
                     "process_sample": process_detail,
                     "process_page": process_page,
                     "log_snapshot": snapshot_payload,
+                    "proc_snapshot": proc_snapshot_payload,
+                    "proc_access": proc_access_result.structuredContent,
                     "linux_diagnostics": diagnostic_text,
                     "kill_process_error": kill_text,
                 }
