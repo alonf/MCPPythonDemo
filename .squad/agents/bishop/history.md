@@ -321,3 +321,90 @@ Correction documented in: .squad/decisions/inbox/bishop-m1-corrected-branch-spec
 - Migration risk: Low (straightforward FastAPI setup + middleware)
 
 **Decision documented to:** `.squad/decisions/inbox/bishop-m4-delta.md` (16.6KB comprehensive spec with appendix)
+
+---
+
+## Learnings (2026-04-14T16:45Z M5 Delta Analysis)
+
+### C# Milestone-5 vs Milestone-4: Elicitation + Destructive Operations
+
+**Finding:** M5 introduces the first **write operation** protected by MCP elicitation protocol. This is pedagogically significant: M1–4 are read-only; M5 teaches how servers can request user confirmation before destructive actions.
+
+**Evidence (Code Inspection):**
+
+**New Server Tool: `KillProcessAsync`**
+- Signature: `async Task<KillProcessResult> KillProcessAsync(McpServer server, int? processId = null, string? reason = null, CancellationToken cancellationToken)`
+- **Stage 1 (if no PID):** Server calls `server.ElicitAsync()` with form schema listing top-5 CPU processes; user selects one
+- **Stage 2 (mandatory):** Server calls `server.ElicitAsync()` again requesting confirmation phrase `CONFIRM PID {pid}`; user must type exactly to proceed
+- **Stage 3 (execute):** `process.Kill(true)` (graceful Windows tree kill); log reason; return typed `KillProcessResult`
+
+**CPU Sampling Logic (for elicitation form population):**
+- T0: Capture {PID → {name, workingSet, utime+stime}} for all processes
+- Wait 750ms
+- T1: Re-capture same snapshot
+- Calculate: `cpu% = (T1.time - T0.time) / (750ms * num_cores) * 100`
+- Rank by CPU % desc, then RAM desc; return top 5
+
+**Result Type: `KillProcessResult` (sealed record)**
+- Factory methods: `Success(pid, name, reason)`, `Cancelled(msg)`, `NotFound(pid)`, `Failed(pid, name, errorMsg)`
+- Status values: "terminated" | "cancelled" | "not-found" | "failed"
+
+**Client Enhancements (M5):**
+- New function: `ReadMcpResource(resourceUri)` — reads paginated resource URIs with ?limit=N&offset=M
+- New function: `GetMcpPromptContentAsync(promptName, argumentsJson)` — fetches and expands named prompts
+- Prompt discovery: Fetches available prompts on startup; includes in agent instructions for workflow context
+- Session management: `agent.CreateSessionAsync()` for multi-turn history (MAF 1.1.0+)
+
+**Package Changes:**
+- MCP SDK: 0.5.0-preview.1 → 1.2.0 (stable release)
+- MAF (Microsoft.Agents.AI): 1.0.0-preview → 1.1.0 (breaking: `CreateAIAgent` → `AsAIAgent`, `GetNewThread` → `CreateSessionAsync`)
+- Azure.AI.OpenAI, Azure.Identity: beta bumps (non-breaking for demo)
+
+**Architecture Pattern:**
+- M1–4: "Protocol learner performs read-only operations" (all queries, no state changes)
+- M5: "Protocol learner learns elicitation: server → client dialog before destructive actions"
+- M6+: Sampling (WMI) and roots (registry access) deferred; M5 is purely elicitation pedagogy
+
+### Parity-Critical Invariants for Python M5
+
+**Must preserve:**
+1. `kill_process` tool with two-stage elicitation (process selection form + confirmation text)
+2. CPU% calculation via time-delta sampling (750ms interval)
+3. Exact confirmation phrase matching (case-insensitive)
+4. Result type with status field ("terminated", "cancelled", "not-found", "failed")
+5. Client prompt discovery and form elicitation response handling
+
+**Acceptable divergence:**
+- Linux /proc sampling instead of Win32 APIs for CPU calculation
+- SIGTERM instead of Windows graceful tree kill
+- systemd journal API instead of Windows Event Viewer for process metadata
+
+### Linux Process Data Mapping
+
+| C# Source | Linux Equivalent | Python |
+|-----------|------------------|--------|
+| `Process.GetProcesses()` | `/proc/[pid]` or `psutil.process_iter()` | `psutil.process_iter()` |
+| `process.ProcessName` | `/proc/[pid]/comm` | `p.name()` |
+| `process.WorkingSet64` | `/proc/[pid]/status` line "VmRSS" | `p.memory_info().rss` |
+| `process.TotalProcessorTime` | `/proc/[pid]/stat` fields utime+stime | `p.cpu_times().user + p.cpu_times().system` |
+| `Process.Kill(true)` | `signal.SIGTERM` + wait + `signal.SIGKILL` | `p.terminate()` + wait + `p.kill()` |
+
+### Pedagogical Arc
+
+- **M1:** "Tools exist; MCP is a protocol for exposing them"
+- **M2:** "Tools can be complex; let's paginate results"
+- **M3:** "Resources and Prompts teach multi-tool workflows"
+- **M4:** "Transport is orthogonal; same protocol, different pipes (HTTP)"
+- **M5 ← HERE:** "Servers can drive conversations; elicitation prevents LLM accidents"
+- **M6:** "Sampling refines decisions; server-side model-driven queries"
+- **M7:** "Roots enforce guardrails; only safe branches of the system tree"
+
+### Migration Risk Assessment
+
+**Low risk:** Elicitation form schema is straightforward; MCP protocol is stable in 1.2.0.
+
+**Medium risk:** CPU% calculation precision; 750ms sampling on variable-load systems may introduce jitter. Mitigation: test on 2- and 16-core machines; document margin of error.
+
+**Medium risk:** Async cancellation handling; Python `asyncio.CancelledError` semantics differ slightly from C# `OperationCanceledException`. Mitigation: explicit timeout enforcement.
+
+**Decision documented to:** `.squad/decisions/inbox/bishop-m5-delta.md` (13.4KB comprehensive analysis)
