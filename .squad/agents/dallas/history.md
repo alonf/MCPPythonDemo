@@ -275,3 +275,114 @@ Implement full M5 parity with all edge-case protections. The constraints are not
 **No code changes needed from Dallas:** Decision written; ready for Ash's implementation review.
 
 ---
+
+## Session: M6 Linux Diagnostics Guardrails (2026-04-14T16:50Z)
+
+### Task
+
+Define the Linux-specific guardrails and mappings for Milestone 6's sampling-assisted diagnostics flow. Verify best data sources, identify server-side validation rules, call out container/permission quirks, and lock down the specification for implementation.
+
+### Key Findings
+
+**Data Source Tier (Always Safe, World-Readable):**
+- Primary: `/proc/meminfo`, `/proc/cpuinfo`, `/proc/loadavg`, `/proc/uptime`, `/proc/stat`, `/proc/version`
+- Secondary: `/proc/net/tcp`, `/proc/net/udp`, `/etc/os-release`
+- Advanced: `/proc/pressure/*`, `/proc/sys/vm/*` (swappiness, dirty_ratio, etc.)
+- **NOT Included:** `/proc/kcore`, `/proc/kmem`, `/sys/class/gpio`, kernel module state (parity with WQL forbidden constructs)
+
+**Server-Side Validation Rules:**
+1. **Sanitization:** Strip markdown artifacts (`\`\`\`bash`, `\`\`\`proc`, etc.), comments, whitespace
+2. **Parsing:** Extract file path from LLM output; handle optional `grep FIELD` syntax
+3. **Path Allowlist:** Only `/proc/*`, `/sys/*`, `/etc/os-release`; reject anything outside
+4. **Forbidden Patterns:** No pipes beyond first segment, no semicolons, backticks, `$()`, `&&`, `||`, redirects
+5. **Path Traversal Protection:** Normalize with `os.path.normpath()`, reject `..` sequences
+6. **Permission Checks:** Graceful PermissionError (offer alternatives, don't escalate)
+7. **Field Validation:** If `grep FIELD` is suggested, verify field exists in target file
+
+**Container & WSL Edge Cases (Non-Negotiable):**
+- **Containers:** `/proc/meminfo` shows container limit, not host memory; no escalation possible; namespace isolation is correct
+- **WSL2:** `/proc/version` contains "microsoft"; `/proc/meminfo` shows WSL allocation (not host); interop processes are read-only; no special code paths needed
+- **Non-Root:** Gracefully reject cross-user `/proc/[pid]/*` reads; suggest world-readable alternatives
+- **Symlinks:** Reject symlink-targets outside allowlist (attack surface)
+- **Test Scope:** Validation must pass on bare-metal, WSL2, Docker (non-root), and Kubernetes pods
+
+**Retry Loop Pattern (From Bishop M6):**
+- Up to 4 retries with accumulated validation error feedback
+- Phase 1: Sample LLM → path suggestion
+- Phase 2: Validate + read (permission-aware)
+- Phase 3: Sample LLM → summarize results
+- Return final summary or exhausted-retries error
+
+### Deliverables
+
+1. **Written to `.squad/decisions/inbox/dallas-m6-linux.md`:**
+   - Complete data source taxonomy with use cases
+   - 8-tier validation flow (sanitization → parsing → allowlist → forbidden patterns → traversal → permissions → field validation → read)
+   - All container, WSL, non-root edge cases with explicit Ash responsibilities
+   - Retry loop algorithm and error handling
+   - Implementation checklist for Ash
+   - Teaching value and pedagogical alignment with C# M6
+
+2. **Non-Blockers Identified:**
+   - Kernel build variations (minimal kernels missing `/proc/pressure/`); handled gracefully
+   - Cgroup v1 vs v2 differences; defer to M7+
+   - LSM (AppArmor, SELinux) permission restrictions; treat as PermissionError
+
+### Learnings Extracted
+
+**On LLM-Guided File Access:**
+- Sanitization first (remove markdown wrappers); then parse (extract file path + field)
+- Allowlist is authority; don't trust `os.path.exists()` alone (symlinks are exploitable)
+- Normalization (`os.path.normpath()`) prevents `../` traversal; required before allowlist check
+
+**On Cross-Platform /proc Stability:**
+- `/proc/meminfo`, `/proc/cpuinfo`, `/proc/loadavg`, `/proc/stat` have been identical since Linux 1.2–2.0
+- No distro-specific branches needed (WSL, containers, bare-metal all use same format)
+- Educational value: `/proc` IS the Linux diagnostics API; WMI is a Windows abstraction; parity in pattern, not in API shape
+
+**On Container Semantics:**
+- Container root (UID 0) ≠ host root; no escalation possible in unprivileged containers
+- Namespace isolation is not a bug; it's the design. "Can't read host /proc" is correct behavior
+- `/proc/meminfo` reporting container limit (not host memory) is correct; confusion comes from expectation mismatch
+
+**On Permission Model:**
+- Non-root UIDs can read system state (`/proc/meminfo`, `/proc/loadavg`)
+- Non-root UIDs cannot read other users' private data (`/proc/[other_uid]/fd`, `/proc/[other_uid]/status`)
+- This is a *feature* for multi-user systems; not a limitation. Teaching opportunity.
+
+**On WSL2 Specifics:**
+- `SC_CLK_TCK`, memory units, process stat format identical to bare Linux; no special cases
+- `/proc/version` string contains "microsoft" for detection; useful for logging but not required for functionality
+- Interop processes visible in `/proc` but unpredictable to signal; for M6 (read-only) not a blocker
+
+### Parity-Critical Constraints for Ash
+
+1. **Validation is mandatory before any read** — Mirrors WQL validation in C# M6
+2. **No privilege escalation** — Server runs as regular user; permission errors are correct
+3. **Retries with error accumulation** — Sampling loop must include prior validation failures in next prompt
+4. **Cross-platform testing** — Validation must pass on bare-metal, WSL, Docker, Kubernetes
+5. **Clear error messages** — Each validation failure should suggest alternatives, not just "rejected"
+6. **No special code for containers/WSL** — Same code paths for all Linux variants
+
+### Recommendation for Ash
+
+Implement M6 sampling-assisted diagnostics with strict allowlist validation. The constraints are identical in intent to C# WQL validation, adapted to Linux `/proc` files. This teaches the core pedagogical lesson: **servers validate LLM output before execution**, regardless of domain (Windows WMI, Linux `/proc`, future Registry/Event Log).
+
+**No code changes needed from Dallas:** Decision written and locked. Ready for implementation and Newt validation.
+
+---
+
+## Session: M6 Implementation Revision (2026-04-14T13:25Z)
+
+### What Changed
+- Reworked the Milestone 6 query validator to mirror Bishop's single-target sampling loop more closely: sampling now returns one allowlisted `PATH` or `PATH | grep FIELD` line instead of free-form JSON.
+- Kept server authority strict: sanitize markdown/comments first, reject shell metacharacters and traversal, normalize paths, then enforce `/proc`/`/sys` allowlists before any read.
+- Bound reads to small, explainable excerpts so `/proc` inspection stays cheap while still useful for summarization.
+- Added environment notes from `/proc/version` and `/proc/self/cgroup` so WSL/container scope can be surfaced in summaries without special execution paths.
+- Preserved M1-M5 behavior while extending smoke and HTTP tests to cover both sampling-capability failure and successful validated diagnostics.
+
+### Learnings
+- For Linux parity, the important contract is **single safe target selection + server validation**, not the exact wire format the sampler emits.
+- `PATH | grep FIELD` is a better teaching shape than JSON for Linux diagnostics because it maps directly to how humans think about `/proc` files while still remaining fully server-validated.
+- WSL/container caveats are best treated as summary context, not branching logic; the same read path should work everywhere and explain scope afterward.
+- Existing milestone regression tests should assert required surfaces as subsets when later milestones add prompts/tools without changing earlier behavior.

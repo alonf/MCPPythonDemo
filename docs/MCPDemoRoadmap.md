@@ -11,7 +11,7 @@ This roadmap mirrors the teaching arc of the original C# `MCPDemo` repository, b
 | 3 | Resources and prompts | Linux log snapshot resources + prompts | ✅ Complete |
 | 4 | HTTP transport and security | Python HTTP MCP transport + auth | ✅ Complete |
 | 5 | Elicitation | Confirmation flow for risky operations | ✅ Complete |
-| 6 | Sampling-assisted diagnostics | AI-assisted Linux diagnostics queries | ⏳ Planned |
+| 6 | Sampling-assisted diagnostics | AI-assisted Linux diagnostics queries | ✅ Complete |
 | 7 | Roots and boundaries | Safe filesystem/config roots | ⏳ Planned |
 
 ## Milestone 1 – Minimal diagnostics tool (STDIO) ✅
@@ -67,11 +67,15 @@ Implemented scope:
 - mandatory typed confirmation phrase before termination
 - Linux-safe SIGTERM then SIGKILL fallback semantics
 
-## Milestone 6 – Sampling-assisted diagnostics ⏳
+## Milestone 6 – Sampling-assisted diagnostics ✅
 
-Planned scope:
-- use model reasoning as a controlled subroutine
-- keep deterministic data collection separate from model-generated explanations
+Implemented scope:
+- added `troubleshoot_linux_diagnostics` for the two-phase sampling pattern
+- server validates every sampled `/proc` or `/sys` path plus optional field before execution
+- exact Python adaptation: the sampled query format is a single safe `PATH` or `PATH | grep FIELD` line rather than WQL
+- deterministic data collection stays separate from model-generated explanations
+- lecture client now advertises sampling support and fulfills `sampling/createMessage`
+- added `TroubleshootLinuxComponent` prompt guidance for the focused teaching flow
 
 ## Milestone 7 – Roots and limitations ⏳
 
@@ -81,4 +85,4 @@ Planned scope:
 
 ## Important Parity Note
 
-This repo intentionally follows the **same milestone progression** as the original C# demo. Milestones 1-5 now have Python parity; public documentation should stay aligned with the real implementation state for Milestone 6 and later.
+This repo intentionally follows the **same milestone progression** as the original C# demo. Milestones 1-6 now have Python parity; public documentation should stay aligned with the real implementation state for Milestone 7 and later.

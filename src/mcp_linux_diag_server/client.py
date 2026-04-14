@@ -1,4 +1,4 @@
-"""Interactive lecture chat client for the Milestone 4 MCP server."""
+"""Interactive lecture chat client for the Milestone 6 MCP server."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ import httpx
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 import mcp.types as types
-from mcp.types import CallToolResult, ElicitRequestParams, TextContent, Tool
+from mcp.types import CallToolResult, CreateMessageRequestParams, ElicitRequestParams, TextContent, Tool
 
 from mcp_linux_diag_server.http_config import API_KEY_HEADER, DEFAULT_HTTP_HOST, DEFAULT_HTTP_PORT, DEMO_API_KEY, build_mcp_url
 
@@ -29,6 +29,8 @@ DEFAULT_SYSTEM_PROMPT = (
     "When the user asks about the system, use get_system_info before answering. "
     "When the user asks about processes, list them first and then use get_process_by_id "
     "or get_process_by_name for detail. "
+    "When the user asks for deeper kernel, memory, CPU, or /proc-/sys-oriented troubleshooting, "
+    "prefer troubleshoot_linux_diagnostics over a broad health summary. "
     "If the user wants to terminate a process, use kill_process and let the server drive "
     "the confirmation workflow. Never invent a PID when the user wants to choose interactively. "
     "When you need a guided workflow, call list_prompts and then get_prompt. "
@@ -272,6 +274,33 @@ class AzureOpenAIChatModel:
             tool_calls=tool_calls,
         )
 
+    async def sample(self, _context, params: CreateMessageRequestParams) -> types.CreateMessageResult | types.ErrorData:  # noqa: ANN001
+        return await asyncio.to_thread(self._sample_sync, params)
+
+    def _sample_sync(self, params: CreateMessageRequestParams) -> types.CreateMessageResult | types.ErrorData:
+        """Handle MCP sampling/createMessage requests with Azure OpenAI."""
+        if params.tools:
+            return types.ErrorData(
+                code=types.INVALID_REQUEST,
+                message="Sampling tool calls are not supported by this lecture client.",
+            )
+
+        response = self._client.chat.completions.create(
+            model=self._deployment,
+            messages=build_sampling_messages(params),
+            max_tokens=params.maxTokens,
+            temperature=params.temperature,
+            stop=params.stopSequences,
+        )
+        choice = response.choices[0]
+        content = _coerce_openai_message_text(choice.message.content)
+        return types.CreateMessageResult(
+            role="assistant",
+            content=types.TextContent(type="text", text=content),
+            model=response.model or self._deployment,
+            stopReason=map_sampling_stop_reason(choice.finish_reason),
+        )
+
 
 def build_openai_tools(mcp_tools: list[Tool]) -> list[dict[str, Any]]:
     """Translate advertised MCP tools to Azure OpenAI function definitions."""
@@ -286,6 +315,54 @@ def build_openai_tools(mcp_tools: list[Tool]) -> list[dict[str, Any]]:
         }
         for tool in mcp_tools
     ]
+
+
+def build_sampling_messages(params: CreateMessageRequestParams) -> list[dict[str, Any]]:
+    """Convert MCP sampling requests into Azure OpenAI chat messages."""
+    messages: list[dict[str, Any]] = []
+    if params.systemPrompt:
+        messages.append({"role": "system", "content": params.systemPrompt})
+    for message in params.messages:
+        messages.append({"role": message.role, "content": _serialize_sampling_message_content(message.content)})
+    return messages
+
+
+def map_sampling_stop_reason(finish_reason: str | None) -> str | None:
+    """Translate Azure/OpenAI finish reasons to MCP sampling stop reasons."""
+    if finish_reason == "length":
+        return "maxTokens"
+    if finish_reason == "tool_calls":
+        return "toolUse"
+    if finish_reason == "stop":
+        return "endTurn"
+    return "endTurn" if finish_reason else None
+
+
+def _serialize_sampling_message_content(content: Any) -> str:
+    blocks = content if isinstance(content, list) else [content]
+    rendered: list[str] = []
+    for block in blocks:
+        if isinstance(block, TextContent):
+            rendered.append(block.text)
+        elif hasattr(block, "model_dump"):
+            rendered.append(json.dumps(block.model_dump(mode="json"), indent=2, sort_keys=True))
+        else:
+            rendered.append(str(block))
+    return "\n".join(part for part in rendered if part).strip()
+
+
+def _coerce_openai_message_text(content: Any) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, dict) and item.get("type") == "text":
+                parts.append(str(item.get("text", "")))
+            else:
+                parts.append(str(item))
+        return "\n".join(part for part in parts if part).strip()
+    return "" if content is None else str(content)
 
 
 def build_client_helper_tools() -> list[dict[str, Any]]:
@@ -576,6 +653,7 @@ async def connect_local_mcp(
     server_module: str = "mcp_linux_diag_server",
     server_host: str = DEFAULT_HTTP_HOST,
     server_port: int = DEFAULT_HTTP_PORT,
+    sampling_callback=None,  # noqa: ANN001
     elicitation_callback=None,  # noqa: ANN001
 ):
     """Launch the local MCP HTTP server and yield an initialized client session."""  # noqa: ANN201
@@ -605,7 +683,12 @@ async def connect_local_mcp(
                 resolved_elicitation_callback = elicitation_callback
                 if resolved_elicitation_callback is None and supports_terminal_elicitation():
                     resolved_elicitation_callback = terminal_elicitation_callback
-                async with ClientSession(read, write, elicitation_callback=resolved_elicitation_callback) as session:
+                async with ClientSession(
+                    read,
+                    write,
+                    sampling_callback=sampling_callback,
+                    elicitation_callback=resolved_elicitation_callback,
+                ) as session:
                     await session.initialize()
                     if not get_session_id():
                         raise RuntimeError("MCP HTTP session initialization did not return an mcp-session-id header.")
@@ -626,7 +709,12 @@ async def run_single_prompt(
     """Run one prompt and return a structured result for scripts or tests."""
     model = AzureOpenAIChatModel(config)
 
-    async with connect_local_mcp(server_module=server_module, server_host=server_host, server_port=server_port) as session:
+    async with connect_local_mcp(
+        server_module=server_module,
+        server_host=server_host,
+        server_port=server_port,
+        sampling_callback=model.sample,
+    ) as session:
         tool_list = await session.list_tools()
         mcp_tools = tool_list.tools
         messages: list[dict[str, Any]] = [
@@ -659,7 +747,12 @@ async def run_chat(
     """Start the MCP server, connect to it, and run the chat loop."""
     model = AzureOpenAIChatModel(config)
 
-    async with connect_local_mcp(server_module=server_module, server_host=server_host, server_port=server_port) as session:
+    async with connect_local_mcp(
+        server_module=server_module,
+        server_host=server_host,
+        server_port=server_port,
+        sampling_callback=model.sample,
+    ) as session:
         tool_list = await session.list_tools()
         mcp_tools = tool_list.tools
         tool_names = ", ".join(tool.name for tool in mcp_tools) or "(none)"
@@ -718,7 +811,7 @@ async def run_chat(
 
 def build_parser() -> argparse.ArgumentParser:
     """Create the CLI parser for the lecture chat client."""
-    parser = argparse.ArgumentParser(description="Run the Milestone 5 Azure OpenAI chat client.")
+    parser = argparse.ArgumentParser(description="Run the Milestone 6 Azure OpenAI chat client.")
     parser.add_argument("question", nargs="?", help="Optional single prompt to run instead of interactive mode.")
     parser.add_argument("--prompt", help="Alias for the positional question argument.")
     parser.add_argument("--json", action="store_true", help="Emit single-prompt output as JSON.")

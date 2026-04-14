@@ -1,4 +1,4 @@
-"""Milestone 4 MCP server entrypoint."""
+"""Milestone 6 MCP server entrypoint."""
 
 import argparse
 from typing import Annotated
@@ -32,14 +32,16 @@ from mcp_linux_diag_server.tools import (
     kill_process as perform_kill_process,
     render_log_snapshot_resource,
     list_processes as collect_process_list,
+    troubleshoot_linux_diagnostics as run_linux_diagnostics,
 )
 
 server = FastMCP(
     name="Linux Diagnostics Demo",
     instructions=(
-        "Milestone 5 teaching server. Use tools to collect Linux diagnostics, "
+        "Milestone 6 teaching server. Use tools to collect Linux diagnostics, "
         "read snapshot resources for larger results, discover prompts for guided workflows, "
-        "connect over authenticated HTTP transport, and require explicit elicitation before risky actions."
+        "connect over authenticated HTTP transport, require explicit elicitation before risky actions, "
+        "and use sampling-assisted Linux diagnostics for deeper /proc and /sys inspection."
     ),
     host=DEFAULT_HTTP_HOST,
     port=DEFAULT_HTTP_PORT,
@@ -138,6 +140,25 @@ async def kill_process(
 ) -> KillProcessResult:
     """Terminate a process only after explicit user confirmation."""
     return await perform_kill_process(process_id=process_id, reason=reason, ctx=ctx)
+
+
+@server.tool(
+    name="troubleshoot_linux_diagnostics",
+    title="Troubleshoot Linux Diagnostics",
+    description=(
+        "Use client-side sampling to translate a natural-language Linux troubleshooting question into a safe "
+        "/proc or /sys query, execute it on the server, and summarize the result."
+    ),
+)
+async def troubleshoot_linux_diagnostics(
+    ctx: Context,
+    user_request: Annotated[
+        str,
+        Field(description="Natural-language Linux troubleshooting request, such as 'Show me dirty memory pages'."),
+    ],
+) -> str:
+    """Use sampling plus server validation for deeper Linux diagnostics."""
+    return await run_linux_diagnostics(user_request=user_request, ctx=ctx)
 
 
 @server.tool(
@@ -250,6 +271,26 @@ def detect_security_anomalies(
 
 
 @server.prompt(
+    name="TroubleshootLinuxComponent",
+    title="Troubleshoot Linux Component",
+    description="Guide the client toward the sampling-assisted Linux diagnostics workflow for a focused subsystem.",
+)
+def troubleshoot_linux_component(
+    component: Annotated[str, Field(description="Subsystem or concern to inspect, such as dirty memory pages or CPU load.")] = "the user's issue",
+) -> str:
+    """Guide a focused Milestone 6 troubleshooting workflow."""
+    return (
+        "You are a Linux internals specialist.\n"
+        f"The user wants a deep inspection of: {component}.\n\n"
+        "WORKFLOW:\n"
+        "1. Do not start with the broad DiagnoseSystemHealth prompt for this focused request.\n"
+        "2. Call `troubleshoot_linux_diagnostics` with the user's natural-language request.\n"
+        "3. Use the tool's diagnosis as the primary answer because the server validated the sampled query.\n"
+        "4. Only fall back to broader process or log tools if the tool reports that the request is outside the allowlisted sources."
+    )
+
+
+@server.prompt(
     name="DiagnoseSystemHealth",
     title="Diagnose System Health",
     description="Guide the client through a broad Linux health-check using tools, resources, and pagination.",
@@ -276,7 +317,7 @@ def create_http_app():
 
 def build_parser() -> argparse.ArgumentParser:
     """Create the CLI parser for the HTTP MCP server."""
-    parser = argparse.ArgumentParser(description="Run the Milestone 5 Linux diagnostics MCP server over HTTP.")
+    parser = argparse.ArgumentParser(description="Run the Milestone 6 Linux diagnostics MCP server over HTTP.")
     parser.add_argument("--host", default=DEFAULT_HTTP_HOST, help=f"HTTP host to bind. Defaults to {DEFAULT_HTTP_HOST}.")
     parser.add_argument("--port", type=int, default=DEFAULT_HTTP_PORT, help=f"HTTP port to bind. Defaults to {DEFAULT_HTTP_PORT}.")
     return parser

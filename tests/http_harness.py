@@ -84,10 +84,15 @@ def running_server(*, host: str = "127.0.0.1", port: int | None = None):  # noqa
 
 
 @contextlib.asynccontextmanager
-async def open_session(*, host: str, port: int, elicitation_callback=None):  # noqa: ANN201, ANN001
+async def open_session(*, host: str, port: int, sampling_callback=None, elicitation_callback=None):  # noqa: ANN201, ANN001
     async with httpx.AsyncClient(headers={API_KEY_HEADER: DEMO_API_KEY}) as http_client:
         async with streamable_http_client(build_mcp_url(host=host, port=port), http_client=http_client) as (read, write, get_session_id):
-            async with ClientSession(read, write, elicitation_callback=elicitation_callback) as session:
+            async with ClientSession(
+                read,
+                write,
+                sampling_callback=sampling_callback,
+                elicitation_callback=elicitation_callback,
+            ) as session:
                 initialize_result = await session.initialize()
                 session_id = get_session_id()
                 if not session_id:

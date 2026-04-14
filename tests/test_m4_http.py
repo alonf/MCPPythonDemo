@@ -150,6 +150,7 @@ class M4HttpTransportTests(unittest.TestCase):
                     "ExplainHighCpu",
                     "DetectSecurityAnomalies",
                     "DiagnoseSystemHealth",
+                    "TroubleshootLinuxComponent",
                 },
             )
 

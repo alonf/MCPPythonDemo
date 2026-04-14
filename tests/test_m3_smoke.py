@@ -30,6 +30,7 @@ class M3ServerSmokeTests(unittest.TestCase):
                     "ExplainHighCpu",
                     "DetectSecurityAnomalies",
                     "DiagnoseSystemHealth",
+                    "TroubleshootLinuxComponent",
                 },
             )
 

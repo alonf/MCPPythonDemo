@@ -23,6 +23,7 @@
 - Milestone 5 parity lives primarily in `src/mcp_linux_diag_server/tools/processes.py`, `src/mcp_linux_diag_server/server.py`, and `src/mcp_linux_diag_server/client.py`: `/proc` CPU delta sampling selects top candidates, `kill_process` always requires `CONFIRM PID {pid}`, and the lecture client can fulfill form elicitation in the local terminal.
 - Linux termination semantics for the demo are safest as `SIGTERM` → short wait → `SIGKILL`, while treating `/proc/<pid>/stat` zombie state as exited so subprocess tests do not hang waiting on another parent to reap.
 - Regression coverage for M5 now lives in `tests/test_processes.py`, `tests/test_m5_http.py`, `tests/test_client.py`, plus the safe no-elicitation check in `scripts/smoke_test.py`.
+- Milestone 6 sampling parity in the Python MCP SDK comes from pairing `ctx.session.create_message(...)` on the server with `ClientSession(..., sampling_callback=...)` in the client; the server still owns validation, while the client keeps ownership of Azure OpenAI calls.
 
 ### C# Codebase Architecture (2026-04-14)
 
@@ -306,3 +307,4 @@ D6, D7, D8 from decision inbox merged:
 - The Python MCP SDK already preserves `mcp-session-id` correctly for HTTP clients, so the main parity work is making sure the first initialize response is authenticated and allowed through unchanged.
 - Reviewer-grade M4 validation needs two lanes: a raw HTTP lane for `401`/session-header behavior and an SDK lane for the unchanged M1-M3 tool, resource, and prompt surface.
 - Using a tiny shared HTTP config module keeps the server, lecture client, smoke script, and inspector config aligned on host, port, route, and demo key without drifting.
+- Milestone 6's live sampling contract is a single plain-text target (`PATH` or `PATH | grep FIELD`); when smoke/test fixtures drift back to JSON, the server correctly rejects them and the published smoke lane breaks even though the feature itself is intact.

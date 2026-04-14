@@ -97,3 +97,13 @@
 - Master remains pinned at M4 baseline (992058e) per pedagogical branch model
 - **Key learning:** Elicitation is the pedagogical centerpiece of M5. The team correctly prioritized server-side enforcement + client capability negotiation as the pattern; this teaches defensive distributed-system thinking. Session IDs + confirmation phrases bridge stateless HTTP with user intent.
 - **Pedagogical value:** Kill operations on M5 enforce the core MCP pattern: tools define what's possible, but elicitation gates what's allowed. This is essential for production safety and teaches students the difference between capability and authority.
+
+## Action (2026-04-14 Milestone 5 → 6 Handoff)
+
+- Confirmed `origin/milestone-5` at finalized tip (393f278 consolidation) ready for M6 base
+- Working tree clean; no unmerged local commits; branch tracking current with remote
+- Created local `milestone-6` branch from clean M5 baseline (393f278)
+- Pushed to origin with upstream tracking configured
+- Worktree left safely on `milestone-6` ready for M6 planning phase
+- Documented branch strategy and hygiene decision in `.squad/decisions/inbox/ripley-m6-branch.md`
+- **Key learning:** Consolidate squad memory aggressively at each milestone boundary (M4 → M5 → M6 pattern confirmed). This prevents context loss and ensures pedagogical continuity. Each forward branch inherits the full teaching arc from history.

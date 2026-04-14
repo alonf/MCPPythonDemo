@@ -1,6 +1,6 @@
 # Linux Diagnostics MCP Server - Lecture Demo
 
-A Python/Linux adaptation of the original `MCPDemo` teaching repository. This repo now reaches **Milestone 5 parity** for the public teaching flow: compact system inspection, Linux process drill-down, log snapshots as resources, workflow prompts, authenticated MCP over HTTP on `/mcp`, and explicit elicitation before process termination.
+A Python/Linux adaptation of the original `MCPDemo` teaching repository. This repo now reaches **Milestone 6 parity** for the public teaching flow: compact system inspection, Linux process drill-down, log snapshots as resources, workflow prompts, authenticated MCP over HTTP on `/mcp`, explicit elicitation before process termination, and sampling-assisted Linux diagnostics.
 
 ## What This Demo Shows
 
@@ -14,7 +14,8 @@ This lecture demo now includes:
 - ✅ **Python 3.12 implementation** with the official MCP Python SDK
 - ✅ **Multiple testing methods**
 - ✅ **Milestone 5 elicitation** for `kill_process`
-- ⏳ **Sampling-assisted diagnostics and roots** are planned later
+- ✅ **Milestone 6 sampling-assisted Linux diagnostics**
+- ⏳ **Roots** are planned later
 
 ## Quick Start
 
@@ -44,7 +45,7 @@ This script:
 3. Performs the MCP initialize handshake on `/mcp`
 4. Confirms `mcp-session-id` flow works across requests
 5. Discovers tools, prompts, and resource templates
-6. Exercises the system, process, and log snapshot flows
+6. Exercises the system, process, log snapshot, and sampling-assisted diagnostics flows
 7. Verifies `kill_process` fails safely when the client does not advertise elicitation support
 8. Verifies the lecture chat client fails safely when Azure OpenAI settings are missing
 
@@ -142,6 +143,10 @@ python3 -m mcp_linux_diag_server.client --prompt "What is the system information
   - If `process_id` is omitted, the server samples the top CPU consumers and asks the client to choose one
   - The server always requires the typed confirmation phrase `CONFIRM PID {pid}`
   - The lecture client handles these prompts locally in the terminal when stdin/stdout are interactive
+- **`troubleshoot_linux_diagnostics`** - Uses sampling to convert a natural-language Linux diagnostics question into a validated `/proc` or `/sys` read
+  - The server validates the sampled path and field against an allowlist before reading anything
+  - Exact Python adaptation: the sampled query is a single safe `PATH` or `PATH | grep FIELD` line instead of WQL
+  - The server then samples again to summarize the observation back to the user
 
 ### Log Snapshots
 - **`create_log_snapshot`** - Creates an immutable snapshot from a common Linux log file and returns resource URIs
@@ -165,11 +170,12 @@ Every resource read returns:
 - **`ExplainHighCpu`** - Correlate CPU-heavy processes with Linux logs
 - **`DetectSecurityAnomalies`** - Review suspicious processes plus auth/security log evidence
 - **`DiagnoseSystemHealth`** - End-to-end system health workflow
+- **`TroubleshootLinuxComponent`** - Focused deep-dive workflow that steers the agent toward `troubleshoot_linux_diagnostics`
 
 ## Projects
 
 ### `src/mcp_linux_diag_server/server.py`
-The authenticated HTTP MCP server exposing the Milestone 1-5 diagnostics tools, log resources, and workflow prompts.
+The authenticated HTTP MCP server exposing the Milestone 1-6 diagnostics tools, log resources, and workflow prompts.
 
 ### `src/mcp_linux_diag_server/client.py`
 The lecture chat client that:
@@ -177,13 +183,14 @@ The lecture chat client that:
 - connects over streamable HTTP with the demo API key
 - exposes MCP prompt/resource APIs as helper tools for the model
 - fulfills MCP form elicitation in the local terminal when the model triggers `kill_process`
+- fulfills MCP sampling requests so the server can synthesize safe Linux diagnostics queries and summaries
 - executes tool-calling turns
 
 ## Testing Methods
 
 | Method | Visual | Interactive | LLM | Best For |
 |--------|--------|-------------|-----|----------|
-| `python3 scripts/smoke_test.py` | ❌ No | ❌ No | ❌ No | quick verification of M1-M5 server behavior |
+| `python3 scripts/smoke_test.py` | ❌ No | ❌ No | ❌ No | quick verification of M1-M6 server behavior |
 | MCP Inspector / `.vscode/mcp.json` | ✅ Yes | ✅ Yes | ❌ No | development, debugging, teaching |
 | `python3 -m mcp_linux_diag_server.client` | ❌ No | ✅ Yes | ✅ Yes | lecture demo flow |
 
@@ -236,7 +243,8 @@ MCPPythonDemo/
 ✅ **Milestone 3** - Log snapshot resources and prompts  
 ✅ **Milestone 4** - HTTP transport and security  
 ✅ **Milestone 5** - Elicitation-backed `kill_process`  
-⏳ **Milestone 6+** - Sampling-assisted diagnostics and roots
+✅ **Milestone 6** - Sampling-assisted Linux diagnostics  
+⏳ **Milestone 7** - Roots
 
 ## License
 

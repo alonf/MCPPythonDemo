@@ -465,3 +465,108 @@ result: ElicitationResult = ctx.elicit(
 **Decision:** Recommend full M5 parity implementation. Timeline: 1–2 days. Risk factors: CPU% precision on loaded systems, SIGKILL fallback timing.
 
 **Documented to:** `.squad/decisions/inbox/bishop-python-elicitation.md` (15.2KB detailed specification)
+
+---
+
+## Learnings (2026-04-14T15:45Z M6 Parity Delta Extraction)
+
+### C# Milestone 6: Sampling-Assisted Diagnostics Architecture
+
+**Finding:** C# M6 introduces **sampling**, not WMI as the core feature. WMI is the domain; sampling is the pattern. This is pedagogically distinct from M5.
+
+**Evidence:**
+- Tool count: 2 (public `TroubleshootWithWmi` + internal `RunWmiQuery`)
+- Public MCP tools exposed: 1 (`troubleshoot_with_wmi`)
+- New code surface: `McpServerWmiToolType.cs` (302 lines), `WmiTroubleshootingPromptType.cs` (31 lines)
+- Chat client changes: +144 lines in `WinDiagMcpChat/Program.cs` (SamplingCapability + SamplingHandler)
+- Roadmap shift: "generic system health report" → "sampling-assisted WMI troubleshooting"
+
+**Architecture (Two-Phase Workflow):**
+1. **Phase 1 (Query Synthesis):** Server calls `server.SampleAsync()` to ask client's LLM to generate WQL from user's request. Retries up to 4 times.
+2. **Phase 2 (Result Summarization):** Server executes query, calls sampling again to summarize results.
+
+**WQL Validation (Server Authority Pattern):**
+- Strict: one line, starts with SELECT, no semicolons or SQL-only constructs
+- Forbidden: JOIN, UNION, GROUP BY, HAVING, ORDER BY, WITH, subqueries
+- Rationale: Sampling can hallucinate; server must refuse dangerous queries before execution
+
+**Client-Side Sampling Support:**
+- Client advertises `SamplingCapability()` in capabilities
+- Client registers `SamplingHandler` to process `CreateMessageRequestParams`
+- Handler calls Azure OpenAI, returns `CreateMessageResult`
+
+**Key Distinction: Sampling vs. Elicitation**
+- **Elicitation (M5):** Server asks human user for input (synchronous, via client UI)
+- **Sampling (M6):** Server asks LLM for text (async model inference)
+
+---
+
+### Parity-Critical vs. Optional
+
+**MUST HAVE:**
+1. Public tool: `troubleshoot_with_[domain](user_request: str) -> str`
+2. Two-phase sampling workflow (query synthesis + summarization)
+3. Server-side validation before execution
+4. Client advertises `SamplingCapability`
+5. Client implements `SamplingHandler`
+6. Retry loop: max 4 attempts
+
+**OPTIONAL:**
+1. Exact WQL syntax (Python uses /proc paths)
+2. Code organization (#region markers)
+3. Logging upgrades
+4. Package versions
+
+**Expected Domain Adaptation:**
+- WMI queries → /proc and /sys queries
+- WQL validation → path/field validation (allowlist, no traversal)
+
+---
+
+### Python Migration: Concrete Spec
+
+**Tool Name:** `troubleshoot_linux_diagnostics`
+
+**Validation Analogues:**
+| C# WQL Rule | Python Equivalent |
+|---|---|
+| No JOIN/UNION/GROUP BY | No pipe chains; single data source |
+| No subqueries | No command execution |
+| Exactly one SELECT | Exactly one /proc path + field |
+| Starts with SELECT | Starts with / (absolute path) |
+| No semicolons | No shell metacharacters |
+
+**Allowlist Example:**
+```python
+ALLOWED_PROC_ROOTS = [
+    "/proc/meminfo",
+    "/proc/cpuinfo",
+    "/proc/loadavg",
+    "/proc/sys/vm/",
+    "/proc/sys/net/",
+]
+```
+
+**Sampling Integration:** Three-step loop (generate path → validate → read → sample summary)
+
+---
+
+### Key Constraints for Python M6
+
+1. **Sampling is mandatory** for parity (not just /proc reader).
+2. **Client handler must be async** (Azure SDK uses async patterns).
+3. **Capability check is required** before calling `sample()`.
+4. **Validation retry loop** (4 attempts max) is non-negotiable.
+5. **Path allowlist** prevents traversal attacks.
+
+---
+
+### Decision Record
+
+**Decision:** Python M6 parity requires sampling infrastructure + /proc-based diagnostics tool.
+
+**Rationale:** Sampling is the pedagogical core of C# M6; WMI is the domain. Python substitutes /proc and preserves the pattern.
+
+**Owners:** Ash (Python Dev), Dallas (Linux Diagnostics Expert), Bishop (Pattern Verification)
+
+**Link:** `.squad/decisions/inbox/bishop-m6-delta.md` (comprehensive spec)

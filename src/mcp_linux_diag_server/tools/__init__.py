@@ -14,6 +14,14 @@ from .processes import (
     list_processes,
     sample_top_cpu_processes,
 )
+from .m6_diagnostics import (
+    LinuxDiagnosticObservation,
+    LinuxDiagnosticQuery,
+    extract_sampling_text,
+    read_linux_diagnostic,
+    troubleshoot_linux_diagnostics,
+    validate_linux_diagnostic_query,
+)
 from .log_snapshots import (
     LogSnapshotLine,
     LogSnapshotPage,
@@ -38,6 +46,8 @@ __all__ = [
     "LogSnapshotPagination",
     "LogSnapshotSummary",
     "KillProcessResult",
+    "LinuxDiagnosticObservation",
+    "LinuxDiagnosticQuery",
     "ProcessCpuUsage",
     "ProcessDetailResult",
     "ProcessInfoResult",
@@ -48,6 +58,7 @@ __all__ = [
     "collect_system_info",
     "create_log_snapshot",
     "clear_log_snapshots",
+    "extract_sampling_text",
     "get_process_by_id",
     "get_process_candidate_by_id",
     "get_processes_by_name",
@@ -56,6 +67,9 @@ __all__ = [
     "kill_process",
     "list_processes",
     "get_process_list",
+    "read_linux_diagnostic",
     "render_log_snapshot_resource",
     "sample_top_cpu_processes",
+    "troubleshoot_linux_diagnostics",
+    "validate_linux_diagnostic_query",
 ]

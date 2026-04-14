@@ -20,6 +20,7 @@ import httpx
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 from mcp.shared.version import LATEST_PROTOCOL_VERSION
+import mcp.types as types
 
 from mcp_linux_diag_server.http_config import API_KEY_HEADER, DEFAULT_HTTP_HOST, DEFAULT_MCP_PATH, DEMO_API_KEY, SESSION_ID_HEADER, build_mcp_url
 
@@ -198,10 +199,31 @@ def _run_raw_http_checks(*, port: int) -> dict[str, Any]:
     }
 
 
+async def _smoke_sampling_callback(_context, params):  # noqa: ANN001, ANN202
+    call_index = getattr(_smoke_sampling_callback, "_call_index", 0)
+    _smoke_sampling_callback._call_index = call_index + 1  # type: ignore[attr-defined]
+    if call_index == 0:
+        request_text = "\n".join(
+            block.text
+            for message in params.messages
+            for block in (message.content if isinstance(message.content, list) else [message.content])
+            if isinstance(block, types.TextContent)
+        )
+        text = "/proc/meminfo | grep Dirty" if "Return exactly one Linux diagnostics source" in request_text else "/proc/meminfo | grep Dirty"
+    else:
+        text = "Dirty memory pages are currently modest, so there is no immediate sign of writeback pressure."
+    return types.CreateMessageResult(
+        role="assistant",
+        content=types.TextContent(type="text", text=text),
+        model="smoke-test-model",
+        stopReason="endTurn",
+    )
+
+
 async def _run_sdk_http_checks(*, port: int) -> dict[str, Any]:
     async with httpx.AsyncClient(headers={API_KEY_HEADER: DEMO_API_KEY}) as http_client:
         async with streamable_http_client(build_mcp_url(host=DEFAULT_HTTP_HOST, port=port), http_client=http_client) as (read, write, get_session_id):
-            async with ClientSession(read, write) as session:
+            async with ClientSession(read, write, sampling_callback=_smoke_sampling_callback) as session:
                 await session.initialize()
                 session_id = get_session_id()
                 if not session_id:
@@ -216,6 +238,7 @@ async def _run_sdk_http_checks(*, port: int) -> dict[str, Any]:
                     "get_process_by_name",
                     "create_log_snapshot",
                     "kill_process",
+                    "troubleshoot_linux_diagnostics",
                 }
                 if not expected_tools.issubset(tool_names):
                     missing_tools = sorted(expected_tools - set(tool_names))
@@ -228,6 +251,7 @@ async def _run_sdk_http_checks(*, port: int) -> dict[str, Any]:
                     "ExplainHighCpu",
                     "DetectSecurityAnomalies",
                     "DiagnoseSystemHealth",
+                    "TroubleshootLinuxComponent",
                 }
                 if prompt_names != expected_prompts:
                     raise RuntimeError(f"Expected prompts were not advertised by the server: {sorted(expected_prompts - prompt_names)}")
@@ -302,6 +326,16 @@ async def _run_sdk_http_checks(*, port: int) -> dict[str, Any]:
                 if "Client does not support elicitation" not in kill_text:
                     raise RuntimeError(f"Unexpected kill_process safety error: {kill_text}")
 
+                diagnostic_result = await session.call_tool(
+                    "troubleshoot_linux_diagnostics",
+                    {"user_request": "Show me dirty memory pages."},
+                )
+                if diagnostic_result.isError:
+                    raise RuntimeError(f"Sampling-assisted diagnostics tool failed: {diagnostic_result.content}")
+                diagnostic_text = "\n".join(item.text for item in diagnostic_result.content if hasattr(item, "text"))
+                if "Dirty" not in diagnostic_text and "dirty" not in diagnostic_text:
+                    raise RuntimeError(f"Unexpected diagnostics summary: {diagnostic_text}")
+
                 return {
                     "session_id": session_id,
                     "tools": tool_names,
@@ -311,6 +345,7 @@ async def _run_sdk_http_checks(*, port: int) -> dict[str, Any]:
                     "process_sample": process_detail,
                     "process_page": process_page,
                     "log_snapshot": snapshot_payload,
+                    "linux_diagnostics": diagnostic_text,
                     "kill_process_error": kill_text,
                 }
 
@@ -364,6 +399,8 @@ def run_agent_smoke() -> dict[str, object]:
 
 
 def main() -> None:
+    if hasattr(_smoke_sampling_callback, "_call_index"):
+        delattr(_smoke_sampling_callback, "_call_index")
     server_payload = run_server_smoke()
     print(json.dumps({"server": server_payload}, indent=2, sort_keys=True))
     agent_payload = run_agent_smoke()

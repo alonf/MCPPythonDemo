@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from mcp.types import CallToolResult, TextContent, Tool
+from mcp.types import CallToolResult, CreateMessageRequestParams, SamplingMessage, TextContent, Tool
 
 from mcp_linux_diag_server.client import (
     AssistantTurn,
@@ -16,9 +16,11 @@ from mcp_linux_diag_server.client import (
     ToolCallRequest,
     assistant_turn_to_message,
     build_client_helper_tools,
+    build_sampling_messages,
     build_openai_tools,
     call_client_helper,
     load_local_env_file,
+    map_sampling_stop_reason,
     terminal_elicitation_callback,
     run_agent_turn,
     serialize_tool_result,
@@ -153,6 +155,24 @@ class ToolTranslationTests(unittest.TestCase):
             helper_names,
             {"list_prompts", "get_prompt", "list_resources", "list_resource_templates", "read_resource"},
         )
+
+    def test_build_sampling_messages_includes_system_prompt(self) -> None:
+        params = CreateMessageRequestParams(
+            messages=[SamplingMessage(role="user", content=TextContent(type="text", text="Explain dirty memory pages."))],
+            systemPrompt="You summarize diagnostics.",
+            maxTokens=64,
+        )
+
+        messages = build_sampling_messages(params)
+
+        self.assertEqual(messages[0], {"role": "system", "content": "You summarize diagnostics."})
+        self.assertEqual(messages[1], {"role": "user", "content": "Explain dirty memory pages."})
+
+    def test_map_sampling_stop_reason_matches_mcp_names(self) -> None:
+        self.assertEqual(map_sampling_stop_reason("stop"), "endTurn")
+        self.assertEqual(map_sampling_stop_reason("length"), "maxTokens")
+        self.assertEqual(map_sampling_stop_reason("tool_calls"), "toolUse")
+        self.assertIsNone(map_sampling_stop_reason(None))
 
     def test_supports_terminal_elicitation_requires_tty(self) -> None:
         with (
