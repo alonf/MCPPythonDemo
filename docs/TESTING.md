@@ -1,10 +1,10 @@
 # Testing Guide
 
-This repo currently supports three reliable ways to test the Python Milestone 1 demo:
+This repo now supports three reliable ways to test the Python Milestone 4 demo:
 
 1. **Automated smoke test script** (fast, repeatable)
 2. **Unit tests** (implementation safety)
-3. **MCP Inspector** (visual UI for MCP exploration)
+3. **MCP Inspector / VS Code config** (visual UI for MCP exploration)
 
 ## 1) Automated Smoke Test Script ⚡
 
@@ -15,11 +15,13 @@ python3 scripts/smoke_test.py
 ```
 
 This script:
-1. Starts the stdio MCP server
-2. Performs the MCP initialize handshake
-3. Discovers tools
-4. Executes `get_system_info`
-5. Confirms the lecture client fails safely when Azure OpenAI settings are not configured
+1. Starts the HTTP MCP server
+2. Verifies `401 Unauthorized` when the API key is omitted
+3. Performs the MCP initialize handshake on `/mcp`
+4. Confirms `mcp-session-id` is returned and reused
+5. Discovers tools, prompts, and resource templates
+6. Exercises `get_system_info`, process tools, and log snapshots
+7. Confirms the lecture client fails safely when Azure OpenAI settings are not configured
 
 Use this for quick verification before publishing changes.
 
@@ -36,27 +38,33 @@ This covers:
 - MCP tool schema translation for Azure OpenAI
 - local `.env.local` file loading behavior
 - lecture client configuration failures
-- the Milestone 1 server smoke path
+- HTTP smoke coverage for the M1-M4 server surface
+- raw HTTP auth/session regression coverage
 
-## 3) MCP Inspector (Visual) 🔍
+## 3) MCP Inspector / VS Code MCP Config 🔍
 
-Inspector is the best way to explore the Milestone 1 MCP surface visually.
-
-### Launch
+### Launch the server
 
 ```bash
-export PATH="$HOME/.local/bin:$PATH"
-mcp dev src/mcp_linux_diag_server/server.py:server --with-editable .
+python3 -m mcp_linux_diag_server
 ```
 
-### In the browser
+### Connect using HTTP
+
+- endpoint: `http://127.0.0.1:5000/mcp`
+- header: `X-API-Key: secure-mcp-key`
+- alternate URL form: `http://127.0.0.1:5000/mcp?apiKey=secure-mcp-key`
+
+The repo includes `.vscode/mcp.json` with the required header already filled in.
+
+### In the browser or client
 
 1. Click **Connect**
 2. Open the **Tools** tab
-3. Select **get_system_info**
+3. Select **get_system_info** or another milestone tool
 4. Click **Call Tool**
 
-The **Logs** tab is useful for inspecting raw JSON-RPC traffic.
+The **Logs** tab is useful for inspecting HTTP JSON-RPC traffic.
 
 ## Comparison
 
@@ -64,7 +72,7 @@ The **Logs** tab is useful for inspecting raw JSON-RPC traffic.
 |--------|-------|-----------|-----------|--------------|----------|
 | `scripts/smoke_test.py` | ⭐ Easy | ❌ No | ❌ No | ❌ No | fast verification |
 | `unittest discover` | ⭐ Easy | ❌ No | ❌ No | ❌ No | regression safety |
-| MCP Inspector | ⭐⭐ Medium | ✅ Yes | ✅ Yes | ❌ No | teaching and debugging |
+| Inspector / `.vscode/mcp.json` | ⭐⭐ Medium | ✅ Yes | ✅ Yes | ❌ No | teaching and debugging |
 
 ## Example Output
 
@@ -106,11 +114,11 @@ python3 -m mcp_linux_diag_server
 
 If that fails, make sure the package is installed in editable mode and that Python 3.12+ is available.
 
-### Tool Not Showing Up in Inspector
+### Inspector Cannot Connect
 
-- Reinstall the package: `python3 -m pip install --user --break-system-packages -e .`
+- Verify the server is already running on port 5000
+- Verify the API key is present as `X-API-Key: secure-mcp-key`
 - Re-run `python3 scripts/smoke_test.py`
-- Reconnect in Inspector and inspect the **Logs** tab
 
 ### Lecture Chat Client Exits Immediately
 

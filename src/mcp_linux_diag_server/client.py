@@ -1,9 +1,10 @@
-"""Interactive lecture chat client for the Milestone 3 MCP server."""
+"""Interactive lecture chat client for the Milestone 4 MCP server."""
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+from contextlib import asynccontextmanager
 import json
 import os
 import sys
@@ -11,9 +12,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Protocol
 
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
+import httpx
+from mcp import ClientSession
+from mcp.client.streamable_http import streamable_http_client
 from mcp.types import CallToolResult, TextContent, Tool
+
+from mcp_linux_diag_server.http_config import API_KEY_HEADER, DEFAULT_HTTP_HOST, DEFAULT_HTTP_PORT, DEMO_API_KEY, build_mcp_url
 
 DEFAULT_DEPLOYMENT = "model-router"
 DEFAULT_API_VERSION = "2024-10-21"
@@ -30,6 +34,7 @@ DEFAULT_SYSTEM_PROMPT = (
     "Keep answers concise, practical, and grounded in tool results."
 )
 AZURE_OPENAI_SCOPE = "https://cognitiveservices.azure.com/.default"
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 class ClientConfigurationError(RuntimeError):
@@ -434,41 +439,110 @@ async def run_agent_turn(
     raise RuntimeError("The model did not finish within the tool-call limit.")
 
 
+async def wait_for_server(host: str, port: int, process: asyncio.subprocess.Process, *, timeout_seconds: float = 10.0) -> None:
+    """Wait until the local HTTP server is accepting TCP connections."""
+    deadline = asyncio.get_running_loop().time() + timeout_seconds
+    last_error: Exception | None = None
+
+    while asyncio.get_running_loop().time() < deadline:
+        if process.returncode is not None:
+            raise RuntimeError(f"Local MCP server exited early with code {process.returncode}.")
+        try:
+            _reader, writer = await asyncio.open_connection(host, port)
+            writer.close()
+            await writer.wait_closed()
+            return
+        except OSError as exc:
+            last_error = exc
+            await asyncio.sleep(0.1)
+
+    raise RuntimeError(f"Timed out waiting for local MCP HTTP server on {host}:{port}: {last_error}")
+
+
+async def terminate_server(process: asyncio.subprocess.Process) -> None:
+    """Stop the local HTTP server subprocess."""
+    if process.returncode is not None:
+        return
+
+    process.terminate()
+    try:
+        await asyncio.wait_for(process.wait(), timeout=5)
+    except asyncio.TimeoutError:
+        process.kill()
+        await process.wait()
+
+
+@asynccontextmanager
+async def connect_local_mcp(
+    *,
+    server_module: str = "mcp_linux_diag_server",
+    server_host: str = DEFAULT_HTTP_HOST,
+    server_port: int = DEFAULT_HTTP_PORT,
+):
+    """Launch the local MCP HTTP server and yield an initialized client session."""  # noqa: ANN201
+    env = dict(os.environ)
+    src_path = str(REPO_ROOT / "src")
+    env["PYTHONPATH"] = f"{src_path}:{env['PYTHONPATH']}" if env.get("PYTHONPATH") else src_path
+    process = await asyncio.create_subprocess_exec(
+        sys.executable,
+        "-m",
+        server_module,
+        "--host",
+        server_host,
+        "--port",
+        str(server_port),
+        cwd=str(REPO_ROOT),
+        env=env,
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.DEVNULL,
+    )
+    try:
+        await wait_for_server(server_host, server_port, process)
+        async with httpx.AsyncClient(headers={API_KEY_HEADER: DEMO_API_KEY}) as http_client:
+            async with streamable_http_client(
+                build_mcp_url(host=server_host, port=server_port),
+                http_client=http_client,
+            ) as (read, write, get_session_id):
+                async with ClientSession(read, write) as session:
+                    await session.initialize()
+                    if not get_session_id():
+                        raise RuntimeError("MCP HTTP session initialization did not return an mcp-session-id header.")
+                    yield session
+    finally:
+        await terminate_server(process)
+
+
 async def run_single_prompt(
     *,
     config: ChatConfig,
     prompt: str,
     server_module: str = "mcp_linux_diag_server",
+    server_host: str = DEFAULT_HTTP_HOST,
+    server_port: int = DEFAULT_HTTP_PORT,
     emit_trace: bool = False,
 ) -> dict[str, Any]:
     """Run one prompt and return a structured result for scripts or tests."""
-    server_params = StdioServerParameters(
-        command=sys.executable,
-        args=["-m", server_module],
-    )
     model = AzureOpenAIChatModel(config)
 
-    async with stdio_client(server_params) as (read, write):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
-            tool_list = await session.list_tools()
-            mcp_tools = tool_list.tools
-            messages: list[dict[str, Any]] = [
-                {"role": "system", "content": config.system_prompt},
-                {"role": "user", "content": prompt},
-            ]
-            answer = await run_agent_turn(
-                session=session,
-                model=model,
-                messages=messages,
-                tools=build_openai_tools(mcp_tools) + build_client_helper_tools(),
-                emit_trace=emit_trace,
-            )
-            return {
-                "question": prompt,
-                "answer": answer,
-                "tools": [tool.name for tool in mcp_tools],
-            }
+    async with connect_local_mcp(server_module=server_module, server_host=server_host, server_port=server_port) as session:
+        tool_list = await session.list_tools()
+        mcp_tools = tool_list.tools
+        messages: list[dict[str, Any]] = [
+            {"role": "system", "content": config.system_prompt},
+            {"role": "user", "content": prompt},
+        ]
+        answer = await run_agent_turn(
+            session=session,
+            model=model,
+            messages=messages,
+            tools=build_openai_tools(mcp_tools) + build_client_helper_tools(),
+            emit_trace=emit_trace,
+        )
+        return {
+            "question": prompt,
+            "answer": answer,
+            "tools": [tool.name for tool in mcp_tools],
+        }
 
 
 async def run_chat(
@@ -476,77 +550,73 @@ async def run_chat(
     config: ChatConfig,
     initial_prompt: str | None = None,
     server_module: str = "mcp_linux_diag_server",
+    server_host: str = DEFAULT_HTTP_HOST,
+    server_port: int = DEFAULT_HTTP_PORT,
     as_json: bool = False,
 ) -> None:
     """Start the MCP server, connect to it, and run the chat loop."""
-    server_params = StdioServerParameters(
-        command=sys.executable,
-        args=["-m", server_module],
-    )
     model = AzureOpenAIChatModel(config)
 
-    async with stdio_client(server_params) as (read, write):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
-            tool_list = await session.list_tools()
-            mcp_tools = tool_list.tools
-            tool_names = ", ".join(tool.name for tool in mcp_tools) or "(none)"
-            print(f"Connected to MCP server. Tools: {tool_names}")
+    async with connect_local_mcp(server_module=server_module, server_host=server_host, server_port=server_port) as session:
+        tool_list = await session.list_tools()
+        mcp_tools = tool_list.tools
+        tool_names = ", ".join(tool.name for tool in mcp_tools) or "(none)"
+        print(f"Connected to MCP server at {build_mcp_url(host=server_host, port=server_port)}. Tools: {tool_names}")
 
-            messages: list[dict[str, Any]] = [{"role": "system", "content": config.system_prompt}]
-            openai_tools = build_openai_tools(mcp_tools) + build_client_helper_tools()
+        messages: list[dict[str, Any]] = [{"role": "system", "content": config.system_prompt}]
+        openai_tools = build_openai_tools(mcp_tools) + build_client_helper_tools()
 
-            pending_prompt = initial_prompt
-            while True:
+        pending_prompt = initial_prompt
+        while True:
+            if pending_prompt is None:
+                try:
+                    user_input = input("User: ").strip()
+                except EOFError:
+                    print()
+                    return
+            else:
+                user_input = pending_prompt.strip()
+                print(f"User: {user_input}")
+
+            if not user_input:
                 if pending_prompt is None:
-                    try:
-                        user_input = input("User: ").strip()
-                    except EOFError:
-                        print()
-                        return
-                else:
-                    user_input = pending_prompt.strip()
-                    print(f"User: {user_input}")
+                    continue
+                return
 
-                if not user_input:
-                    if pending_prompt is None:
-                        continue
-                    return
+            if user_input.lower() in {"exit", "quit"}:
+                return
 
-                if user_input.lower() in {"exit", "quit"}:
-                    return
+            messages.append({"role": "user", "content": user_input})
+            answer = await run_agent_turn(
+                session=session,
+                model=model,
+                messages=messages,
+                tools=openai_tools,
+                emit_trace=True,
+            )
 
-                messages.append({"role": "user", "content": user_input})
-                answer = await run_agent_turn(
-                    session=session,
-                    model=model,
-                    messages=messages,
-                    tools=openai_tools,
-                    emit_trace=True,
-                )
-
-                if as_json:
-                    print(
-                        json.dumps(
-                            {
-                                "question": user_input,
-                                "answer": answer,
-                            },
-                            indent=2,
-                            sort_keys=True,
-                        )
+            if as_json:
+                print(
+                    json.dumps(
+                        {
+                            "question": user_input,
+                            "answer": answer,
+                        },
+                        indent=2,
+                        sort_keys=True,
                     )
-                else:
-                    print(f"Assistant: {answer}")
+                )
+            else:
+                print(f"Assistant: {answer}")
 
-                if pending_prompt is not None:
-                    return
-                pending_prompt = None
+            if pending_prompt is not None:
+                return
+            pending_prompt = None
 
 
 def build_parser() -> argparse.ArgumentParser:
     """Create the CLI parser for the lecture chat client."""
-    parser = argparse.ArgumentParser(description="Run the Milestone 3 Azure OpenAI chat client.")
+    parser = argparse.ArgumentParser(description="Run the Milestone 4 Azure OpenAI chat client.")
     parser.add_argument("question", nargs="?", help="Optional single prompt to run instead of interactive mode.")
     parser.add_argument("--prompt", help="Alias for the positional question argument.")
     parser.add_argument("--json", action="store_true", help="Emit single-prompt output as JSON.")
@@ -578,6 +648,8 @@ def build_parser() -> argparse.ArgumentParser:
         default="mcp_linux_diag_server",
         help="Python module to launch for the MCP server.",
     )
+    parser.add_argument("--server-host", default=DEFAULT_HTTP_HOST, help=f"Local MCP server host. Defaults to {DEFAULT_HTTP_HOST}.")
+    parser.add_argument("--server-port", type=int, default=DEFAULT_HTTP_PORT, help=f"Local MCP server port. Defaults to {DEFAULT_HTTP_PORT}.")
     return parser
 
 
@@ -610,6 +682,8 @@ def main(argv: list[str] | None = None) -> int:
                 config=config,
                 initial_prompt=prompt,
                 server_module=args.server_module,
+                server_host=args.server_host,
+                server_port=args.server_port,
                 as_json=args.json,
             )
         )

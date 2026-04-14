@@ -1,20 +1,19 @@
 # Linux Diagnostics MCP Server - Lecture Demo
 
-A Python/Linux adaptation of the original `MCPDemo` teaching repository. This repo now reaches **Milestone 3 parity** for the public teaching flow: compact system inspection, Linux process drill-down, log snapshots as resources, and MCP prompts for guided workflows.
+A Python/Linux adaptation of the original `MCPDemo` teaching repository. This repo now reaches **Milestone 4 parity** for the public teaching flow: compact system inspection, Linux process drill-down, log snapshots as resources, workflow prompts, and authenticated MCP over HTTP on `/mcp`.
 
 ## What This Demo Shows
 
-This is an early **MCP lecture demo** with:
+This lecture demo now includes:
 - ✅ **Tools**: read-only Linux diagnostics tools for `get_system_info`, `get_process_list`, `get_process_by_id`, and `get_process_by_name`
 - ✅ **Resources**: paged `syslog://snapshot/...` log snapshot resources
 - ✅ **Prompts**: MCP workflow prompts for error analysis, CPU investigation, security review, and health diagnosis
-- ✅ **AI Chat Client**: a Python Azure OpenAI client that launches the local stdio server and lets the model call MCP tools, prompts, and resources
-- ✅ **STDIO transport**
+- ✅ **HTTP transport**: streamable MCP over `http://127.0.0.1:5000/mcp`
+- ✅ **API key auth**: `X-API-Key` header or `?apiKey=secure-mcp-key`
+- ✅ **AI Chat Client**: a Python Azure OpenAI client that launches the local HTTP server and lets the model call MCP tools, prompts, and resources
 - ✅ **Python 3.12 implementation** with the official MCP Python SDK
 - ✅ **Multiple testing methods**
-- ⏳ **HTTP transport, elicitation, sampling, and roots** are planned later and are **not implemented yet**
-
-Perfect for learning the MCP basics before expanding into the later milestones from the original C# arc.
+- ⏳ **Elicitation, sampling, and roots** are planned later
 
 ## Quick Start
 
@@ -39,30 +38,51 @@ python3 scripts/smoke_test.py
 ```
 
 This script:
-1. Starts the local stdio MCP server
-2. Performs the MCP handshake
-3. Discovers tools
-4. Discovers prompts and resource templates
-5. Executes `get_system_info`
-6. Exercises the process inspection tools
-7. Creates and reads a log snapshot resource
-8. Verifies the lecture chat client fails safely when Azure OpenAI settings are missing
+1. Starts the local HTTP MCP server
+2. Verifies `401 Unauthorized` without an API key
+3. Performs the MCP initialize handshake on `/mcp`
+4. Confirms `mcp-session-id` flow works across requests
+5. Discovers tools, prompts, and resource templates
+6. Exercises the system, process, and log snapshot flows
+7. Verifies the lecture chat client fails safely when Azure OpenAI settings are missing
 
-### 3. Test with MCP Inspector
+### 3. Run the Server Manually
 
 ```bash
-export PATH="$HOME/.local/bin:$PATH"
-mcp dev src/mcp_linux_diag_server/server.py:server --with-editable .
+python3 -m mcp_linux_diag_server
 ```
 
-Then in Inspector:
-1. Connect to the server
-2. Open the **Tools**, **Resources**, and **Prompts** tabs
-3. Select **get_system_info**, **get_process_list**, **get_process_by_id**, **get_process_by_name**, or **create_log_snapshot**
-4. Call the tool and inspect the JSON response or returned resource URI
-5. Read the snapshot resource and inspect the prompts
+The server listens on:
 
-### 4. Use the Lecture Chat Client
+- endpoint: `http://127.0.0.1:5000/mcp`
+- demo API key: `secure-mcp-key`
+
+### 4. Test with MCP Inspector or VS Code MCP config
+
+Start the server in one terminal, then connect using the HTTP endpoint above.
+
+This repo includes `.vscode/mcp.json` with the required header:
+
+```json
+{
+  "servers": {
+    "linux-diag-demo": {
+      "url": "http://127.0.0.1:5000/mcp",
+      "headers": {
+        "X-API-Key": "secure-mcp-key"
+      }
+    }
+  }
+}
+```
+
+If your inspector accepts a URL directly, this query-string form also works:
+
+```text
+http://127.0.0.1:5000/mcp?apiKey=secure-mcp-key
+```
+
+### 5. Use the Lecture Chat Client
 
 Copy the sample environment file and fill in your local Azure OpenAI settings:
 
@@ -143,12 +163,12 @@ Every resource read returns:
 ## Projects
 
 ### `src/mcp_linux_diag_server/server.py`
-The stdio MCP server exposing the Milestone 3 diagnostics tools, log resources, and workflow prompts.
+The authenticated HTTP MCP server exposing the Milestone 1-4 diagnostics tools, log resources, and workflow prompts.
 
 ### `src/mcp_linux_diag_server/client.py`
 The lecture chat client that:
-- launches the local stdio server
-- lists MCP tools
+- launches the local HTTP server
+- connects over streamable HTTP with the demo API key
 - exposes MCP prompt/resource APIs as helper tools for the model
 - executes tool-calling turns
 
@@ -156,8 +176,8 @@ The lecture chat client that:
 
 | Method | Visual | Interactive | LLM | Best For |
 |--------|--------|-------------|-----|----------|
-| `python3 scripts/smoke_test.py` | ❌ No | ❌ No | ❌ No | quick verification of Milestone 1 + 3 server surfaces |
-| MCP Inspector | ✅ Yes | ✅ Yes | ❌ No | development, debugging, teaching |
+| `python3 scripts/smoke_test.py` | ❌ No | ❌ No | ❌ No | quick verification of M1-M4 server behavior |
+| MCP Inspector / `.vscode/mcp.json` | ✅ Yes | ✅ Yes | ❌ No | development, debugging, teaching |
 | `python3 -m mcp_linux_diag_server.client` | ❌ No | ✅ Yes | ✅ Yes | lecture demo flow |
 
 For the Milestone 1 validation checklist that still underpins the base lecture flow, see [M1_VALIDATION_GUIDE.md](M1_VALIDATION_GUIDE.md).
@@ -170,22 +190,27 @@ MCPPythonDemo/
 ├── LICENSE.txt
 ├── pyproject.toml
 ├── .env.example
+├── .vscode/
+│   └── mcp.json
 ├── scripts/
 │   └── smoke_test.py
 ├── src/
 │   └── mcp_linux_diag_server/
 │       ├── __main__.py
 │       ├── client.py
+│       ├── http_config.py
 │       ├── server.py
 │       └── tools/
 │           ├── log_snapshots.py
 │           ├── processes.py
 │           └── system_info.py
 ├── tests/
+│   ├── http_harness.py
 │   ├── test_client.py
 │   ├── test_m1_smoke.py
 │   ├── test_m2_smoke.py
 │   ├── test_m3_smoke.py
+│   ├── test_m4_http.py
 │   ├── test_log_snapshots.py
 │   ├── test_processes.py
 │   └── test_system_info.py
@@ -202,7 +227,7 @@ MCPPythonDemo/
 ✅ **Milestone 1** - Minimal diagnostics tool over stdio plus lecture chat client  
 ✅ **Milestone 2** - Process inspection  
 ✅ **Milestone 3** - Log snapshot resources and prompts  
-⏳ **Milestone 4** - HTTP transport and security  
+✅ **Milestone 4** - HTTP transport and security  
 ⏳ **Milestone 5+** - Elicitation, sampling, and roots
 
 ## License

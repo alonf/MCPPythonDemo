@@ -9,14 +9,14 @@ This roadmap mirrors the teaching arc of the original C# `MCPDemo` repository, b
 | 1 | Minimal stdio diagnostics tool | `get_system_info` + lecture chat client | ✅ Complete |
 | 2 | Process inspection | Linux process listing, per-PID detail, and by-name paging | ✅ Complete |
 | 3 | Resources and prompts | Linux log snapshot resources + prompts | ✅ Complete |
-| 4 | HTTP transport and security | Python HTTP MCP transport + auth | ⏳ Planned |
+| 4 | HTTP transport and security | Python HTTP MCP transport + auth | ✅ Complete |
 | 5 | Elicitation | Confirmation flow for risky operations | ⏳ Planned |
 | 6 | Sampling-assisted diagnostics | AI-assisted Linux diagnostics queries | ⏳ Planned |
 | 7 | Roots and boundaries | Safe filesystem/config roots | ⏳ Planned |
 
 ## Milestone 1 – Minimal diagnostics tool (STDIO) ✅
 
-Implemented today:
+Implemented scope:
 - stdio MCP server
 - one read-only tool: `get_system_info`
 - Linux/WSL-safe data sources:
@@ -26,7 +26,7 @@ Implemented today:
   - `/proc/meminfo`
 - Python lecture chat client that launches the server and supports Azure OpenAI tool-calling
 
-Milestone 1 remains the base teaching path and stays fully supported.
+Milestone 1 remains the conceptual base teaching path.
 
 ## Milestone 2 – Process inspection ✅
 
@@ -49,11 +49,15 @@ Implemented scope:
 - chat-client helper access to MCP prompts and resources
 - clear tool/resource/prompt separation, with tools creating snapshots and resources reading them
 
-## Milestone 4 – HTTP transport and security ⏳
+## Milestone 4 – HTTP transport and security ✅
 
-Planned scope:
-- move beyond stdio
-- add an authenticated HTTP MCP endpoint
+Implemented scope:
+- switched the runnable server from stdio-first to authenticated streamable HTTP
+- mounted MCP on `/mcp`
+- accepted the demo API key via `X-API-Key` header or `apiKey` query parameter
+- preserved HTTP client session handling through the MCP SDK `mcp-session-id` flow
+- updated the lecture client, smoke path, and inspector config for HTTP mode
+- kept the Milestone 1-3 tool, resource, and prompt surface unchanged
 
 ## Milestone 5 – Elicitation ⏳
 
@@ -75,4 +79,4 @@ Planned scope:
 
 ## Important Parity Note
 
-This repo intentionally follows the **same milestone progression** as the original C# demo. Milestones 1-3 now have Python parity; public documentation should stay aligned with the real implementation state for Milestone 4 and later.
+This repo intentionally follows the **same milestone progression** as the original C# demo. Milestones 1-4 now have Python parity; public documentation should stay aligned with the real implementation state for Milestone 5 and later.

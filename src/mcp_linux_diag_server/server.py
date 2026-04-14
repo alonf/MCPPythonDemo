@@ -1,10 +1,23 @@
-"""Milestone 3 MCP server entrypoint."""
+"""Milestone 4 MCP server entrypoint."""
 
+import argparse
 from typing import Annotated
+from urllib.parse import parse_qs
 
 from mcp.server.fastmcp import FastMCP
 from pydantic import Field
+from starlette.responses import PlainTextResponse
+import uvicorn
 
+from mcp_linux_diag_server.http_config import (
+    API_KEY_HEADER,
+    API_KEY_QUERY_PARAMETER,
+    DEFAULT_HTTP_HOST,
+    DEFAULT_HTTP_PORT,
+    DEFAULT_MCP_PATH,
+    DEMO_API_KEY,
+    build_mcp_url,
+)
 from mcp_linux_diag_server.tools import (
     BasicProcessInfo,
     LogSnapshotSummary,
@@ -22,10 +35,38 @@ from mcp_linux_diag_server.tools import (
 server = FastMCP(
     name="Linux Diagnostics Demo",
     instructions=(
-        "Milestone 3 teaching server. Use tools to collect Linux diagnostics, "
-        "read snapshot resources for larger results, and discover prompts for guided workflows."
+        "Milestone 4 teaching server. Use tools to collect Linux diagnostics, "
+        "read snapshot resources for larger results, discover prompts for guided workflows, "
+        "and connect over authenticated HTTP transport."
     ),
+    host=DEFAULT_HTTP_HOST,
+    port=DEFAULT_HTTP_PORT,
+    streamable_http_path=DEFAULT_MCP_PATH,
 )
+
+
+class ApiKeyMiddleware:
+    """Simple demo API key gate for the MCP HTTP endpoint."""
+
+    def __init__(self, app, *, path_prefix: str = DEFAULT_MCP_PATH, expected_api_key: str = DEMO_API_KEY) -> None:  # noqa: ANN001
+        self._app = app
+        self._path_prefix = path_prefix
+        self._expected_api_key = expected_api_key
+
+    async def __call__(self, scope, receive, send) -> None:  # noqa: ANN001
+        if scope["type"] != "http" or not scope["path"].startswith(self._path_prefix):
+            await self._app(scope, receive, send)
+            return
+
+        headers = {key.decode("latin-1").lower(): value.decode("latin-1") for key, value in scope.get("headers", [])}
+        query = parse_qs(scope.get("query_string", b"").decode("utf-8"))
+        api_key = headers.get(API_KEY_HEADER.lower()) or next(iter(query.get(API_KEY_QUERY_PARAMETER, [])), None)
+        if api_key != self._expected_api_key:
+            response = PlainTextResponse("Unauthorized", status_code=401)
+            await response(scope, receive, send)
+            return
+
+        await self._app(scope, receive, send)
 
 
 @server.tool(
@@ -203,9 +244,31 @@ def diagnose_system_health(
     )
 
 
-def main() -> None:
-    """Run the MCP server over stdio."""
-    server.run(transport="stdio")
+def create_http_app():
+    """Create the authenticated Streamable HTTP MCP app."""  # noqa: ANN202
+    return ApiKeyMiddleware(server.streamable_http_app())
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """Create the CLI parser for the HTTP MCP server."""
+    parser = argparse.ArgumentParser(description="Run the Milestone 4 Linux diagnostics MCP server over HTTP.")
+    parser.add_argument("--host", default=DEFAULT_HTTP_HOST, help=f"HTTP host to bind. Defaults to {DEFAULT_HTTP_HOST}.")
+    parser.add_argument("--port", type=int, default=DEFAULT_HTTP_PORT, help=f"HTTP port to bind. Defaults to {DEFAULT_HTTP_PORT}.")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> None:
+    """Run the MCP server over streamable HTTP."""
+    args = build_parser().parse_args(argv)
+    endpoint = build_mcp_url(host=args.host, port=args.port)
+    print("Status: Ready, waiting for MCP client over HTTP (Streamable)")
+    print(f"Endpoint: {endpoint}")
+    uvicorn.run(
+        create_http_app(),
+        host=args.host,
+        port=args.port,
+        log_level=server.settings.log_level.lower(),
+    )
 
 
 if __name__ == "__main__":

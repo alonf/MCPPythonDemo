@@ -1,38 +1,18 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import subprocess
 import sys
 import unittest
-from pathlib import Path
 
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
+from tests.http_harness import open_session, running_server
 
 
 class M2ServerSmokeTests(unittest.TestCase):
     def run_with_session(self, assertion):  # noqa: ANN001, ANN201
-        env = dict(os.environ)
-        env["PYTHONPATH"] = (
-            f"{REPO_ROOT / 'src'}:{env['PYTHONPATH']}"
-            if env.get("PYTHONPATH")
-            else str(REPO_ROOT / "src")
-        )
-
         async def runner() -> None:
-            async with stdio_client(
-                StdioServerParameters(
-                    command=sys.executable,
-                    args=["-m", "mcp_linux_diag_server"],
-                    cwd=REPO_ROOT,
-                    env=env,
-                )
-            ) as (read, write):
-                async with ClientSession(read, write) as session:
-                    initialize_result = await session.initialize()
+            with running_server() as (host, port, _process):
+                async with open_session(host=host, port=port) as (session, initialize_result, _session_id):
                     await assertion(session, initialize_result)
 
         asyncio.run(runner())

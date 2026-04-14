@@ -1,0 +1,10 @@
+{
+  "servers": {
+    "linux-diag-demo": {
+      "url": "http://127.0.0.1:5000/mcp",
+      "headers": {
+        "X-API-Key": "secure-mcp-key"
+      }
+    }
+  }
+}
