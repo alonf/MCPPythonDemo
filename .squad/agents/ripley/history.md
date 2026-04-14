@@ -82,6 +82,53 @@
 - Fast-forwarded `master` to M4 finalized tip (992058e) and pushed to origin
 - Created `milestone-5` from clean M4 baseline (992058e) with upstream tracking
 - Worktree left safely on `milestone-5` ready for M5 planning phase
+- **Key learning:** Clean branch advancement with consolidated memory prevents context loss at milestone boundaries. Squad history is the team's institutional knowledge—consolidate aggressively before forward branching.
+
+## Action (2026-04-14 Milestone 5 Implementation & Publish)
+
+- Elicitation-gated process control: `kill_process` tool with CONFIRM PID protocol
+- HTTP server enforces elicitation capability barrier before termination; safe rejection when unsupported
+- Client-side elicitation: lecture client display of prompts and elicitation flow with local terminal interaction
+- Full test coverage: 53 tests passed; smoke test validates kill_process safety and success lanes
+- Reviewer Newt acceptance: "Accept Milestone 5 as currently implemented" on evidence of exact M5 contract parity
+- Committed bec880e to `origin/milestone-5` with full squad artifacts and implementation depth
+- Master remains pinned at M4 baseline (992058e) per pedagogical branch model
+- **Key learning:** Elicitation is the pedagogical centerpiece of M5. The team correctly prioritized server-side enforcement + client capability negotiation as the pattern; this teaches defensive distributed-system thinking.
+
+## Action (2026-04-14 Milestone 5 → 6 Handoff)
+
+- Confirmed `origin/milestone-5` at finalized tip (393f278 consolidation) ready for M6 base
+- Working tree clean; no unmerged local commits; branch tracking current with remote
+- Created local `milestone-6` branch from clean M5 baseline (393f278)
+- Pushed to origin with upstream tracking configured
+- Worktree left safely on `milestone-6` ready for M6 planning phase
+- **Key learning:** Consolidate squad memory aggressively at each milestone boundary. This prevents context loss and ensures pedagogical continuity.
+
+## Action (2026-04-14 Milestone 6 Publication)
+
+- Verified all M6 work approved: diagnostics sampling, bridge pattern, session state preservation
+- Staged and committed all implementation with Copilot Co-authored-by trailer
+- Commit 8a9dc4e pushed to `origin/milestone-6` with full team artifacts
+- Master remains at M4 teaching baseline (992058e) — branch model intact
+- **Key learning:** M6 closes the sampling + session pattern space. Bridge pattern is the architectural win: shared session identity enables progressive stateful tools across protocols.
+
+## Action (2026-04-14 Milestone 6 Rename Correction Published)
+
+- Accepted the rename correction identified during M6 acceptance: `m6_diagnostics.py` → `linux_diagnostics.py`
+- Staged all supporting changes (imports in __init__.py, test suite, squad skill documentation)
+- Validated: all 60 unit tests + smoke test pass post-rename; no contract violations
+- Commit e75c18b ("Correct Milestone 6 module naming: rename m6_diagnostics to linux_diagnostics") pushed to `origin/milestone-6`
+- Verified `master` remains at M4 baseline (992058e); no backward coupling
+- Documented correction publication in `.squad/decisions/inbox/ripley-m6-rename-publish.md`
+- **Key learning:** Naming hygiene during acceptance review prevents long-term maintenance friction. Milestone labels belong in branches, not permanent Python paths. This correction was low-risk because it happened post-M6 validation—no retrospective coupling.
+- **Branch discipline confirmed:** The M6 correction-publish cycle proves the branch model is resilient: independent milestones can absorb late acceptance feedback without side-effecting earlier teaching snapshots.
+
+## Action (2026-04-14 Milestone 4 → 5 Handoff)
+
+- Consolidated M4 squad memory: committed 992058e to `origin/milestone-4` with full team history and insights
+- Fast-forwarded `master` to M4 finalized tip (992058e) and pushed to origin
+- Created `milestone-5` from clean M4 baseline (992058e) with upstream tracking
+- Worktree left safely on `milestone-5` ready for M5 planning phase
 - Documented branch model stability and M5 scope hint in `.squad/decisions/inbox/ripley-m5-branch.md`
 - **Key learning:** Clean branch advancement with consolidated memory prevents context loss at milestone boundaries. Squad history is the team's institutional knowledge—consolidate aggressively before forward branching.
 - **Branch strategy confirmed:** Teaching arc (master + immutable milestones) + forward branch (current milestone) maintains pedagogical integrity while enabling squad work without retrospective coupling.
