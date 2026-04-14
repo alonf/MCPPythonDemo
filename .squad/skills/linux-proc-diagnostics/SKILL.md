@@ -279,6 +279,7 @@ docker run -it python:3.11 python3 -c "import os; print([x for x in os.listdir('
 4. **Respect permissions:** Graceful fallback for non-root; document limitations.
 5. **Cache at snapshot level:** Cache the snapshot file, not individual /proc reads.
 6. **Test on multiple distros:** journalctl, cgroup formats vary; verify portability.
+7. **Reject forbidden classes first:** For paths like `/proc/kcore`, `/proc/kmem`, `/proc/sysvipc/`, or hardware/debug sysfs roots, fail before `stat()`, `realpath()`, elicitation, or allowlist updates. Access-request flows are only for safe-but-not-yet-approved roots.
 
 ## References
 

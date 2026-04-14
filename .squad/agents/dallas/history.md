@@ -9,6 +9,7 @@
 
 - The target demo is Linux Diagnostics, so `/proc` and Linux-native system interfaces are core design inputs.
 - The migration should keep the lecture structure while adapting to Linux-specific data sources cleanly.
+- For M7 safety boundaries, forbidden `/proc` and `/sys` classes must fail before any filesystem inspection, elicitation, or allowlist expansion; only blocked-but-eligible paths belong in the access-request flow.
 
 ## Lecture Analysis (Season_of_AI_5_MCP.pdf)
 

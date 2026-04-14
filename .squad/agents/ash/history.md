@@ -24,6 +24,10 @@
 - Linux termination semantics for the demo are safest as `SIGTERM` → short wait → `SIGKILL`, while treating `/proc/<pid>/stat` zombie state as exited so subprocess tests do not hang waiting on another parent to reap.
 - Regression coverage for M5 now lives in `tests/test_processes.py`, `tests/test_m5_http.py`, `tests/test_client.py`, plus the safe no-elicitation check in `scripts/smoke_test.py`.
 - Milestone 6 sampling parity in the Python MCP SDK comes from pairing `ctx.session.create_message(...)` on the server with `ClientSession(..., sampling_callback=...)` in the client; the server still owns validation, while the client keeps ownership of Azure OpenAI calls.
+- Milestone 7 proc/sys sandboxing is easiest to keep additive by introducing a dedicated allowed-roots snapshot path (`create_proc_snapshot`, `request_proc_access`, `proc://snapshot/{id}`) instead of retrofitting the Milestone 6 sampling validator; this preserves the M6 query contract while adding the C# roots model on top.
+- Reusing the log snapshot shape works well for proc/sys snapshots when file snapshots page line-by-line and directory snapshots page deterministic child metadata; key implementation file is `src/mcp_linux_diag_server/tools/proc_snapshots.py`.
+- FastMCP resource templates can still hand query strings through the base `{snapshot_id}` slot, so the safest Python pattern is to parse `?limit=...&offset=...` defensively inside the resource reader as well as registering the explicit paged template.
+- Prompt/client guidance for Milestone 7 should explicitly say `request_proc_access` comes before `create_proc_snapshot` on blocked paths; the key wiring lives in `src/mcp_linux_diag_server/server.py`, `src/mcp_linux_diag_server/client.py`, `scripts/smoke_test.py`, and `tests/test_m7_http.py`.
 
 ### C# Codebase Architecture (2026-04-14)
 

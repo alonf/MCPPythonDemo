@@ -21,6 +21,17 @@ MAX_PROC_RESOURCE_LIMIT = 500
 RESOURCE_SCHEME = "proc"
 _SUPPORTED_ROOT_PREFIXES = ("/proc", "/sys")
 _FORBIDDEN_TOKENS = (";", "`", "$(", "&&", "||", ">", "<")
+_FORBIDDEN_EXACT_PATHS = (
+    "/proc/kcore",
+    "/proc/kmem",
+    "/proc/mem",
+)
+_FORBIDDEN_PATH_PREFIXES = (
+    "/proc/sysvipc",
+    "/sys/class/gpio",
+    "/sys/class/pwm",
+    "/sys/kernel/debug",
+)
 _DEFAULT_ALLOWED_ROOTS = (
     "/proc/loadavg",
     "/proc/meminfo",
@@ -166,6 +177,7 @@ class ProcRootsService:
 
     def add_allowed_root(self, path: str) -> str:
         normalized = _normalize_proc_path(path)
+        _ensure_path_not_forbidden(normalized)
         with self._lock:
             self._allowed_roots.add(normalized)
         return normalized
@@ -310,6 +322,7 @@ def validate_proc_snapshot_path(path: str, *, require_allowed_root: bool = True)
     """Normalize and validate a proc/sys snapshot path."""
 
     normalized_path = _normalize_proc_path(path)
+    _ensure_path_not_forbidden(normalized_path)
     path_info = _read_path_info(normalized_path)
     matched_allowed_root = ProcRootsService.instance().resolve_matching_root(normalized_path)
     if require_allowed_root and matched_allowed_root is None:
@@ -354,8 +367,13 @@ def _normalize_proc_path(path: str) -> str:
 
     normalized_path = os.path.normpath(raw_path)
     if not any(normalized_path == root or normalized_path.startswith(f"{root}/") for root in _SUPPORTED_ROOT_PREFIXES):
-        raise ValueError("Only /proc and /sys paths are supported for Milestone 7 snapshots.")
+        raise ValueError("Access denied. Only /proc and /sys paths are supported for Milestone 7 snapshots.")
     return normalized_path
+
+
+def _ensure_path_not_forbidden(path: str) -> None:
+    if path in _FORBIDDEN_EXACT_PATHS or any(_is_path_within(path, prefix) for prefix in _FORBIDDEN_PATH_PREFIXES):
+        raise ValueError(f"Path is forbidden for security reasons: {path}")
 
 
 def _read_path_info(path: str) -> dict[str, str]:
@@ -371,7 +389,7 @@ def _read_path_info(path: str) -> dict[str, str]:
 
     resolved_path = os.path.realpath(path)
     if not any(_is_path_within(resolved_path, root) for root in _SUPPORTED_ROOT_PREFIXES):
-        raise ValueError(f"Resolved path escapes /proc or /sys: {path}")
+        raise ValueError(f"Unsafe symlink escape detected for {path}. The resolved path leaves /proc or /sys.")
 
     path_kind = "directory" if stat.S_ISDIR(stat_result.st_mode) else "file"
     return {"resolved_path": resolved_path, "path_kind": path_kind}

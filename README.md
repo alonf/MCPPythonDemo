@@ -1,6 +1,6 @@
 # Linux Diagnostics MCP Server - Lecture Demo
 
-A Python/Linux adaptation of the original `MCPDemo` teaching repository. This repo now reaches **Milestone 6 parity** for the public teaching flow: compact system inspection, Linux process drill-down, log snapshots as resources, workflow prompts, authenticated MCP over HTTP on `/mcp`, explicit elicitation before process termination, and sampling-assisted Linux diagnostics.
+A Python/Linux adaptation of the original `MCPDemo` teaching repository. This repo now reaches **Milestone 7 parity** for the public teaching flow: compact system inspection, Linux process drill-down, log snapshots as resources, workflow prompts, authenticated MCP over HTTP on `/mcp`, explicit elicitation before process termination, sampling-assisted Linux diagnostics, and allowed-root proc/sys snapshots.
 
 ## What This Demo Shows
 
@@ -15,7 +15,7 @@ This lecture demo now includes:
 - ✅ **Multiple testing methods**
 - ✅ **Milestone 5 elicitation** for `kill_process`
 - ✅ **Milestone 6 sampling-assisted Linux diagnostics**
-- ⏳ **Roots** are planned later
+- ✅ **Milestone 7 roots** for read-only `/proc` and `/sys` snapshots
 
 ## Quick Start
 
@@ -45,7 +45,7 @@ This script:
 3. Performs the MCP initialize handshake on `/mcp`
 4. Confirms `mcp-session-id` flow works across requests
 5. Discovers tools, prompts, and resource templates
-6. Exercises the system, process, log snapshot, and sampling-assisted diagnostics flows
+6. Exercises the system, process, log snapshot, proc snapshot, and sampling-assisted diagnostics flows
 7. Verifies `kill_process` fails safely when the client does not advertise elicitation support
 8. Verifies the lecture chat client fails safely when Azure OpenAI settings are missing
 
@@ -147,6 +147,13 @@ python3 -m mcp_linux_diag_server.client --prompt "What is the system information
   - The server validates the sampled path and field against an allowlist before reading anything
   - Exact Python adaptation: the sampled query is a single safe `PATH` or `PATH | grep FIELD` line instead of WQL
   - The server then samples again to summarize the observation back to the user
+- **`create_proc_snapshot`** - Creates an immutable read-only snapshot from an allowed `/proc` or `/sys` path and returns resource URIs
+  - File snapshots page line-by-line content
+  - Directory snapshots page deterministic child metadata without following symlinks
+  - Enforces explicit allowed roots before reading anything
+- **`request_proc_access`** - Uses elicitation to request read-only access to an additional `/proc` or `/sys` root
+  - Adds the approved root to the server's in-memory allowlist
+  - Lets the model ask for access proactively before a blocked snapshot attempt
 
 ### Log Snapshots
 - **`create_log_snapshot`** - Creates an immutable snapshot from a common Linux log file and returns resource URIs
@@ -158,10 +165,12 @@ python3 -m mcp_linux_diag_server.client --prompt "What is the system information
 
 - **`syslog://snapshot/{snapshot_id}`** - Reads a stored Linux log snapshot with default pagination
 - **`syslog://snapshot/{snapshot_id}?limit={limit}&offset={offset}`** - Reads a specific page from a stored snapshot
+- **`proc://snapshot/{snapshot_id}`** - Reads a stored proc/sys snapshot with default pagination
+- **`proc://snapshot/{snapshot_id}?limit={limit}&offset={offset}`** - Reads a specific page from a stored proc/sys snapshot
 
 Every resource read returns:
 - snapshot metadata
-- captured lines
+- captured entries
 - pagination metadata (`total_count`, `returned_count`, `limit`, `offset`, `has_more`, `next_offset`)
 
 ## Prompts
@@ -175,7 +184,7 @@ Every resource read returns:
 ## Projects
 
 ### `src/mcp_linux_diag_server/server.py`
-The authenticated HTTP MCP server exposing the Milestone 1-6 diagnostics tools, log resources, and workflow prompts.
+The authenticated HTTP MCP server exposing the Milestone 1-7 diagnostics tools, resources, and workflow prompts.
 
 ### `src/mcp_linux_diag_server/client.py`
 The lecture chat client that:
@@ -184,13 +193,14 @@ The lecture chat client that:
 - exposes MCP prompt/resource APIs as helper tools for the model
 - fulfills MCP form elicitation in the local terminal when the model triggers `kill_process`
 - fulfills MCP sampling requests so the server can synthesize safe Linux diagnostics queries and summaries
+- teaches the model to request proc/sys access before snapshotting blocked paths
 - executes tool-calling turns
 
 ## Testing Methods
 
 | Method | Visual | Interactive | LLM | Best For |
 |--------|--------|-------------|-----|----------|
-| `python3 scripts/smoke_test.py` | ❌ No | ❌ No | ❌ No | quick verification of M1-M6 server behavior |
+| `python3 scripts/smoke_test.py` | ❌ No | ❌ No | ❌ No | quick verification of M1-M7 server behavior |
 | MCP Inspector / `.vscode/mcp.json` | ✅ Yes | ✅ Yes | ❌ No | development, debugging, teaching |
 | `python3 -m mcp_linux_diag_server.client` | ❌ No | ✅ Yes | ✅ Yes | lecture demo flow |
 
@@ -216,6 +226,7 @@ MCPPythonDemo/
 │       ├── server.py
 │       └── tools/
 │           ├── log_snapshots.py
+│           ├── proc_snapshots.py
 │           ├── processes.py
 │           └── system_info.py
 ├── tests/
@@ -244,7 +255,7 @@ MCPPythonDemo/
 ✅ **Milestone 4** - HTTP transport and security  
 ✅ **Milestone 5** - Elicitation-backed `kill_process`  
 ✅ **Milestone 6** - Sampling-assisted Linux diagnostics  
-⏳ **Milestone 7** - Roots
+✅ **Milestone 7** - Roots and proc/sys snapshots
 
 ## License
 

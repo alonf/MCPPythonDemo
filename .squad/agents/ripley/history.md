@@ -9,6 +9,8 @@
 
 - The project is anchored to the existing MCPDemo repo, its branches, and the lecture PDF under `docs/`.
 - The team must preserve branch ideas and lecture alignment while translating the implementation from C# to Python.
+- When the lecture arc closes on the final milestone, stop protecting `master` as an earlier snapshot; publish the reviewed final milestone commit to both `master` and the final milestone branch.
+- Final publication should be done with a normal commit on the checked-out branch and an ff-only branch move for the sibling branch so both names end on one identical teaching artifact without history surgery.
 
 ## Team Updates (2026-04-13T22:03:56Z Orchestration)
 
@@ -174,3 +176,11 @@
 - Documented M7 branch decision in `.squad/decisions/inbox/ripley-m7-branch.md`
 - **Key learning:** Consolidation pattern (M4 → M5 → M6 → M7) proven resilient. Squad state inheritance via branch base ensures no context loss. Branch model sustains teaching arc while enabling forward work.
 - **Branch strategy affirmed:** Immutable teaching branches (master + milestone-N) + forward working branch (next milestone) maintains pedagogical integrity and operational clarity across team transitions.
+
+## Action (2026-04-14 Milestone 7 Publication)
+
+- Accepted the reviewed M7 worktree after Newt's re-review cleared the forbidden proc/sys path guard.
+- Validated the full test lane before publication: targeted M7 tests, full unit discovery, and smoke test all green.
+- Published the final M7 state by committing on `master` and aligning `milestone-7` to the same final tip.
+- Decision recorded in `.squad/decisions/inbox/ripley-m7-publish.md`.
+- **Key learning:** The final milestone changes the branch rule. Once the teaching arc is complete, duplicated tip commits are noise; a shared final commit on `master` and `milestone-7` is the clearest release state.

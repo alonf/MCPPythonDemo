@@ -242,7 +242,8 @@ def create_log_snapshot(
 )
 def get_log_snapshot_resource(snapshot_id: str) -> str:
     """Read a stored Linux log snapshot."""
-    return render_log_snapshot_resource(snapshot_id)
+    resolved_snapshot_id, limit, offset = _parse_snapshot_resource_request(snapshot_id)
+    return render_log_snapshot_resource(resolved_snapshot_id, limit=limit, offset=offset)
 
 
 @server.resource(
@@ -266,7 +267,8 @@ def get_log_snapshot_resource_page(snapshot_id: str, limit: int, offset: int) ->
 )
 def get_proc_snapshot_resource(snapshot_id: str) -> str:
     """Read a stored proc/sys snapshot."""
-    return render_proc_snapshot_resource(snapshot_id)
+    resolved_snapshot_id, limit, offset = _parse_snapshot_resource_request(snapshot_id)
+    return render_proc_snapshot_resource(resolved_snapshot_id, limit=limit, offset=offset)
 
 
 @server.resource(
@@ -387,6 +389,16 @@ def diagnose_system_health(
 def create_http_app():
     """Create the authenticated Streamable HTTP MCP app."""  # noqa: ANN202
     return ApiKeyMiddleware(server.streamable_http_app())
+
+
+def _parse_snapshot_resource_request(snapshot_id: str) -> tuple[str, int, int]:
+    if "?" not in snapshot_id:
+        return snapshot_id, 50, 0
+    raw_snapshot_id, raw_query = snapshot_id.split("?", 1)
+    query = parse_qs(raw_query)
+    limit = int(next(iter(query.get("limit", ["50"])), "50"))
+    offset = int(next(iter(query.get("offset", ["0"])), "0"))
+    return raw_snapshot_id, limit, offset
 
 
 def build_parser() -> argparse.ArgumentParser:

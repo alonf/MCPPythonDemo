@@ -63,6 +63,14 @@ class ProcSnapshotTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "request_proc_access"):
             validate_proc_snapshot_path(blocked_candidate)
 
+    def test_validate_proc_snapshot_path_rejects_forbidden_path_even_without_allowlist_check(self) -> None:
+        with self.assertRaisesRegex(ValueError, "forbidden"):
+            validate_proc_snapshot_path("/proc/kcore", require_allowed_root=False)
+
+    def test_adding_forbidden_root_is_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "forbidden"):
+            ProcRootsService.instance().add_allowed_root("/proc/kcore")
+
     def test_adding_root_unblocks_supported_path(self) -> None:
         candidate = next(
             (value for value in ("/proc/filesystems", "/proc/modules") if Path(value).is_file()),

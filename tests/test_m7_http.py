@@ -16,6 +16,7 @@ _DYNAMIC_ACCESS_CANDIDATES = (
     "/proc/modules",
     "/sys/devices/system/cpu/possible",
 )
+_FORBIDDEN_PATH = "/proc/kcore"
 _UNSAFE_PATHS = (
     "/proc/../etc/passwd",
     "/proc/self/root/etc/passwd",
@@ -146,6 +147,29 @@ class M7RootsAndSnapshotsTests(unittest.TestCase):
 
         self.run_with_session(assertion, elicitation_callback=_approval_callback_for(access_path))
 
+    def test_create_proc_snapshot_rejects_forbidden_path(self) -> None:
+        async def assertion(session, _initialize_result):  # noqa: ANN001
+            result = await session.call_tool("create_proc_snapshot", {"path": _FORBIDDEN_PATH})
+            self.assertTrue(result.isError)
+            message = _tool_text(result).lower()
+            _fail_if_tool_missing(self, "create_proc_snapshot", message)
+            self.assertIn("forbidden", message)
+
+        self.run_with_session(assertion)
+
+    def test_request_proc_access_rejects_forbidden_path_without_elicitation(self) -> None:
+        async def assertion(session, _initialize_result):  # noqa: ANN001
+            result = await session.call_tool(
+                "request_proc_access",
+                {"path": _FORBIDDEN_PATH, "reason": "Milestone 7 forbidden-path validation"},
+            )
+            self.assertTrue(result.isError)
+            message = _tool_text(result).lower()
+            _fail_if_tool_missing(self, "request_proc_access", message)
+            self.assertIn("forbidden", message)
+
+        self.run_with_session(assertion, elicitation_callback=_unexpected_elicitation_callback)
+
     def test_create_proc_snapshot_rejects_obvious_escape_attempts(self) -> None:
         async def assertion(session, _initialize_result):  # noqa: ANN001
             for path in _UNSAFE_PATHS:
@@ -183,6 +207,10 @@ def _approval_callback_for(expected_path: str):
         return types.ElicitResult(action="accept", content={field_name: value})
 
     return callback
+
+
+async def _unexpected_elicitation_callback(_context, _params):  # noqa: ANN001, ANN202
+    raise AssertionError("Forbidden proc/sys paths must be rejected before elicitation.")
 
 
 def _resolve_elicitation_value(field_name: str, field_schema: dict[str, object], expected_path: str) -> object:

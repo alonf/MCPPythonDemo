@@ -12,7 +12,7 @@ This roadmap mirrors the teaching arc of the original C# `MCPDemo` repository, b
 | 4 | HTTP transport and security | Python HTTP MCP transport + auth | ✅ Complete |
 | 5 | Elicitation | Confirmation flow for risky operations | ✅ Complete |
 | 6 | Sampling-assisted diagnostics | AI-assisted Linux diagnostics queries | ✅ Complete |
-| 7 | Roots and boundaries | Safe filesystem/config roots | ⏳ Planned |
+| 7 | Roots and boundaries | Safe filesystem/config roots | ✅ Complete |
 
 ## Milestone 1 – Minimal diagnostics tool (STDIO) ✅
 
@@ -77,12 +77,15 @@ Implemented scope:
 - lecture client now advertises sampling support and fulfills `sampling/createMessage`
 - added `TroubleshootLinuxComponent` prompt guidance for the focused teaching flow
 
-## Milestone 7 – Roots and limitations ⏳
+## Milestone 7 – Roots and limitations ✅
 
-Planned scope:
-- safe access boundaries
-- explicit limits around what the client/server may inspect
+Implemented scope:
+- added `create_proc_snapshot` for read-only `/proc` and `/sys` snapshots behind explicit allowed roots
+- added `request_proc_access` so the server can use elicitation to approve a new read-only root at runtime
+- added paged `proc://snapshot/{snapshot_id}` resources with `?limit=...&offset=...`
+- blocked path traversal, unsupported paths, and symlink escape before any file read occurs
+- updated prompts and client guidance to request access proactively before attempting blocked paths
 
 ## Important Parity Note
 
-This repo intentionally follows the **same milestone progression** as the original C# demo. Milestones 1-6 now have Python parity; public documentation should stay aligned with the real implementation state for Milestone 7 and later.
+This repo intentionally follows the **same milestone progression** as the original C# demo. Milestones 1-7 now have Python parity; public documentation should stay aligned with the real implementation state for later changes.

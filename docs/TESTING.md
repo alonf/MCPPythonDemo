@@ -1,6 +1,6 @@
 # Testing Guide
 
-This repo now supports three reliable ways to test the Python Milestone 6 demo:
+This repo now supports three reliable ways to test the Python Milestone 7 demo:
 
 1. **Automated smoke test script** (fast, repeatable)
 2. **Unit tests** (implementation safety)
@@ -20,7 +20,7 @@ This script:
 3. Performs the MCP initialize handshake on `/mcp`
 4. Confirms `mcp-session-id` is returned and reused
 5. Discovers tools, prompts, and resource templates
-6. Exercises `get_system_info`, process tools, log snapshots, and sampling-assisted diagnostics
+6. Exercises `get_system_info`, process tools, log snapshots, proc snapshots, and sampling-assisted diagnostics
 7. Confirms `kill_process` fails safely when elicitation is unavailable
 8. Confirms the lecture client fails safely when Azure OpenAI settings are not configured
 
@@ -39,7 +39,7 @@ This covers:
 - MCP tool schema translation for Azure OpenAI
 - local `.env.local` file loading behavior
 - lecture client configuration failures
-- HTTP smoke coverage for the M1-M6 server surface
+- HTTP smoke coverage for the M1-M7 server surface
 - raw HTTP auth/session regression coverage
 
 ## 3) MCP Inspector / VS Code MCP Config 🔍
@@ -120,6 +120,7 @@ If that fails, make sure the package is installed in editable mode and that Pyth
 - Verify the server is already running on port 5000
 - Verify the API key is present as `X-API-Key: secure-mcp-key`
 - Use an elicitation-capable client if you want to exercise `kill_process`
+- Use `request_proc_access` before `create_proc_snapshot` when you need a proc/sys path outside the default allowed roots
 - Re-run `python3 scripts/smoke_test.py`
 
 ### Lecture Chat Client Exits Immediately

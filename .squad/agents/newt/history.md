@@ -28,6 +28,8 @@
 - Reviewer-grade M6 acceptance depends on both parity surface and runnable proof: tool discovery, prompt discovery, client sampling support, validation/retry coverage, and the published smoke command must all agree on the same sampling callback contract.
 - Rename-only follow-ups still need runnable proof: verify the milestone-labeled module path is gone from live code (`src/`, `tests/`, `scripts/`, docs/skills), confirm the domain-based import path loads through package exports, and rerun the full M6 regression lane (`python3 -m unittest discover -s tests -q` plus `python3 scripts/smoke_test.py`) before accepting the branch state.
 - M7 QA should use one HTTP integration suite to prove both the new sandbox surface (`create_proc_snapshot`, `request_proc_access`, `proc://snapshot/...`) and additive safety guarantees, while still asserting the M3-M6 tools/prompts/resources remain discoverable as an unchanged subset.
+- Green M7 regression lanes are not enough for sign-off unless QA also probes a known-forbidden proc/sys target (for example `/proc/kcore`) and proves the server rejects it before allowlisting or elicitation; the current implementation still lets that path normalize and be added as an allowed root.
+- Dallas's forbidden-path revision closes the actual M7 gap only when three lanes agree: direct helper calls reject `/proc/kcore`, HTTP `request_proc_access` never reaches elicitation for that path, and the published regression commands (`python3 -m unittest discover -s tests -q` plus `python3 scripts/smoke_test.py`) still stay green.
 
 ---
 
