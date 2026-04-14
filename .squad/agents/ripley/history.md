@@ -40,3 +40,10 @@
 - Confirmed the C# demo branch model expects `master`, `milestone-1`, and `milestone-2` as the active public branches at this stage.
 - Locked `milestone-1` to the existing public M1 baseline commit so the teaching snapshot stays stable.
 - Kept `milestone-2` and `master` aligned on the squad-enabled branch state so the team can operate there without starting Milestone 2 feature work.
+
+## Action (2026-04-14 Milestone-3 Branch Creation)
+
+- Created local `milestone-3` branch from clean `milestone-2` baseline.
+- Pushed `milestone-3` to origin with tracking set up.
+- Worktree left safely on `milestone-3`.
+- No implementation started; ready for M3 planning phase.

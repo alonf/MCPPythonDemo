@@ -183,3 +183,52 @@ Correction documented in: .squad/decisions/inbox/bishop-m1-corrected-branch-spec
 - Both teams aligned on Azure OpenAI path forward
 - M1 lecture demonstration proven and validated
 - No blocking changes to implementation roadmap
+
+---
+
+## Learnings (2026-04-14T13:45Z M3 Delta Analysis)
+
+### C# Milestone-3 vs Milestone-2: Three Major Additions
+
+**Finding:** M3 crystallizes MCP pedagogical progression with three key concepts:
+
+1. **Event Log Snapshot Tool** (`create_event_log_snapshot`)
+   - Parameters: logName (validated against whitelist), xPathQuery
+   - Returns: resourceUri + snapshotId + eventCount
+   - Stores immutable snapshots in singleton storage
+   - Teaching: deterministic, parameterized data capture
+
+2. **Resource URIs with Pagination** (`eventlog://snapshot/{id}?limit={int}&offset={int}`)
+   - Handler reads from snapshot storage, applies pagination
+   - Response includes: TotalCount, ReturnedCount, HasMore, NextOffset (always)
+   - Defaults: limit=50, max=500, offset=0
+   - Validation: limit > 0 and <= 500, offset >= 0
+   - Teaching: immutable snapshots, client-orchestrated paging, large dataset handling
+
+3. **MCP Prompts** (4 prompts for AI-guided workflows)
+   - `AnalyzeRecentApplicationErrors(hoursBack=24)` — Event log error analysis
+   - `ExplainHighCpu()` — Multi-tool correlation (processes + event logs)
+   - `DetectSecurityAnomalies(hoursBack=24)` — Security-focused analysis
+   - `DiagnoseSystemHealth(hoursBack=24)` — Comprehensive health report
+   - Returns: plain text workflow guides with numbered steps
+   - Teaching: multi-tool orchestration, pattern recognition, severity classification
+
+4. **Chat Client** (Optional, not parity-critical for M3)
+   - Demonstrates prompt discovery, resource pagination, Azure OpenAI integration
+   - Python M3 can defer this to M4+
+
+**Architecture Pattern Confirmed:**
+- Program.cs: `.WithResourcesFromAssembly()` and `.WithPromptsFromAssembly()` registration
+- Event log storage injected as singleton
+- Logging upgraded: JSON console, stderr, respects MCP_LOG_LEVEL
+- Project structure: Tools/, Resources/, Prompts/ folders (separation of concerns)
+
+**Parity-Critical Mapping for Python M3:**
+- Event Log Tool → journalctl/syslog with XPath-equivalent filtering
+- Resource URI → `syslog://snapshot/{id}?limit={int}&offset={int}` (same pagination schema)
+- Prompts → same 4 prompts, plain text, same parameters
+- Storage → in-memory concurrent dict, same snapshot ID keying
+
+**Migration Decision:** All three components parity-critical for M3; chat client deferred.
+
+**Decision documented to:** `.squad/decisions/inbox/bishop-m3-delta.md` (comprehensive spec, 13.9KB)

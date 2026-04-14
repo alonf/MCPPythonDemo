@@ -1067,3 +1067,73 @@ If the new user requirement is "use an actual Azure AI Foundry project/runtime,"
 **Owners:** Ripley (Lead), Ash (Python Dev), Newt (Tester)
 
 **Status:** Ratified & Implemented
+
+---
+
+## Milestone 3: Event Log Resources & Prompts (2026-04-14)
+
+### D9: M3 Architecture — Event Log Tool, Resources, Prompts
+
+**Decision by:** Bishop  
+**Status:** Active  
+**Date:** 2026-04-14T13:45Z
+
+Extend Milestone 2 server with three major components that crystallize MCP pedagogy:
+
+1. **Event Log Snapshot Tool** (`create_event_log_snapshot`):
+   - Parameters: logName (whitelist: Application, Security, Setup, System), xPathQuery
+   - Returns: JSON with resourceUri (syslog://snapshot/{id}), snapshotId, eventCount
+   - Storage: in-memory singleton, keyed by snapshot ID (UUID hex)
+   - Validation: strict log name whitelist, log-on error
+
+2. **Resource URIs with Pagination** (`syslog://snapshot/{id}?limit={int}&offset={int}`):
+   - Response schema includes TotalCount, ReturnedCount, HasMore, NextOffset
+   - Defaults: limit=50, max=500, offset=0
+   - Validates: limit > 0 and <= 500, offset >= 0
+   - Teaching pattern: tools create snapshots; resources page them; client orchestrates multi-page reads
+
+3. **Four MCP Prompts** (plain-text workflow guides):
+   - `AnalyzeRecentApplicationErrors(hoursBack: int = 24)`
+   - `ExplainHighCpu()` (multi-tool: processes + event logs)
+   - `DetectSecurityAnomalies(hoursBack: int = 24)`
+   - `DiagnoseSystemHealth(hoursBack: int = 24)` (comprehensive analysis)
+   - All return numbered-step plain-text guides, not JSON
+
+**Linux Data Mapping** (per D2):
+- Event Log → journalctl/syslog
+- XPath query → journalctl filter expressions
+- Snapshot storage stays in-memory pattern, same pagination
+
+**Python M3 Parity-Critical Items:**
+- Snapshot storage in-memory singleton (threading.Lock + dict)
+- Pagination response must include all metadata (TotalCount, ReturnedCount, HasMore, NextOffset)
+- Prompts as plain-text guides with expected tool calls and parameters
+- Tool/Resource/Prompt registration with MCP server
+
+**Optional (Nice-to-Have):**
+- Chat client can defer to M4+; MCP Inspector sufficient for M3 validation
+
+**Owners:** Bishop (C# parity spec), Ash (Python implementation), Ripley (Lead)
+
+**Evidence Files (C# Source):**
+- `WinDiagMcpServer/Tools/EventLog/McpServerEventLogToolType.cs`
+- `WinDiagMcpServer/Resources/EventLog/McpServerEventLogResourceType.cs`
+- `WinDiagMcpServer/Resources/EventLog/EventLogSnapshotStorage.cs`
+- `WinDiagMcpServer/Prompts/SystemDiagnosticsPromptType.cs`
+- `WinDiagMcpServer/Prompts/EventLog/EventLogAnalysisPromptType.cs`
+
+---
+
+### D10: M3 Branch Model
+
+**Decision by:** Ripley  
+**Status:** Active  
+**Date:** 2026-04-14
+
+Create `milestone-3` branch from clean `milestone-2` baseline. Track origin and prepare for implementation.
+
+**Rationale:** Follows 7-milestone linear progression per D1. Maintains pedagogical sequencing.
+
+**Status:** Implemented — `milestone-3` created, pushed, worktree ready for M3 planning.
+
+**Owners:** Ripley (Lead)
