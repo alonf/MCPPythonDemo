@@ -7,7 +7,7 @@ This roadmap mirrors the teaching arc of the original C# `MCPDemo` repository, b
 | Milestone | Original C# Theme | Python/Linux Plan | Status |
 |----------|--------------------|-------------------|--------|
 | 1 | Minimal stdio diagnostics tool | `get_system_info` + lecture chat client | ✅ Complete |
-| 2 | Process inspection | Linux process listing and per-PID detail | ⏳ Planned |
+| 2 | Process inspection | Linux process listing, per-PID detail, and by-name paging | ✅ Complete |
 | 3 | Resources and prompts | Linux snapshot resources + prompts | ⏳ Planned |
 | 4 | HTTP transport and security | Python HTTP MCP transport + auth | ⏳ Planned |
 | 5 | Elicitation | Confirmation flow for risky operations | ⏳ Planned |
@@ -26,14 +26,15 @@ Implemented today:
   - `/proc/meminfo`
 - Python lecture chat client that launches the server and supports Azure OpenAI tool-calling
 
-This is the only milestone currently implemented in this public Python repo.
+Milestone 1 remains the base teaching path and stays fully supported.
 
-## Milestone 2 – Process inspection ⏳
+## Milestone 2 – Process inspection ✅
 
-Planned scope:
-- list running processes
-- inspect one process by PID
-- keep responses small and lecture-friendly
+Implemented scope:
+- list running processes with lightweight summaries
+- inspect one process by PID with Linux `/proc` detail
+- inspect matching processes by name with default paging (`page_size=5`)
+- keep the summary-first, detail-second teaching flow
 
 ## Milestone 3 – Resources and prompts ⏳
 
@@ -68,4 +69,4 @@ Planned scope:
 
 ## Important Parity Note
 
-This repo intentionally follows the **same milestone progression** as the original C# demo, but it does **not** claim feature parity with the later milestones yet. Public documentation should stay aligned with the real Python implementation state.
+This repo intentionally follows the **same milestone progression** as the original C# demo, but it does **not** claim feature parity with Milestone 3 and later yet. Public documentation should stay aligned with the real Python implementation state.

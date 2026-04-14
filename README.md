@@ -1,11 +1,11 @@
 # Linux Diagnostics MCP Server - Lecture Demo
 
-A Python/Linux adaptation of the original `MCPDemo` teaching repository. This repo mirrors the C# demo's public structure and documentation style while staying truthful about current scope: **Milestone 1 parity only** today.
+A Python/Linux adaptation of the original `MCPDemo` teaching repository. This repo now reaches **Milestone 2 parity** for the public teaching flow: compact system inspection plus Linux process listing and drill-down.
 
 ## What This Demo Shows
 
 This is an early **MCP lecture demo** with:
-- ✅ **Tools**: one read-only Linux diagnostics tool, `get_system_info`
+- ✅ **Tools**: read-only Linux diagnostics tools for `get_system_info`, `get_process_list`, `get_process_by_id`, and `get_process_by_name`
 - ✅ **AI Chat Client**: a Python Azure OpenAI client that launches the local stdio server and lets the model call MCP tools
 - ✅ **STDIO transport**
 - ✅ **Python 3.12 implementation** with the official MCP Python SDK
@@ -41,7 +41,8 @@ This script:
 2. Performs the MCP handshake
 3. Discovers tools
 4. Executes `get_system_info`
-5. Verifies the lecture chat client fails safely when Azure OpenAI settings are missing
+5. Exercises the process inspection tools
+6. Verifies the lecture chat client fails safely when Azure OpenAI settings are missing
 
 ### 3. Test with MCP Inspector
 
@@ -53,7 +54,7 @@ mcp dev src/mcp_linux_diag_server/server.py:server --with-editable .
 Then in Inspector:
 1. Connect to the server
 2. Open the **Tools** tab
-3. Select **get_system_info**
+3. Select **get_system_info**, **get_process_list**, **get_process_by_id**, or **get_process_by_name**
 4. Call the tool and inspect the JSON response
 
 ### 4. Use the Lecture Chat Client
@@ -103,10 +104,18 @@ python3 -m mcp_linux_diag_server.client --prompt "What is the system information
   - Memory summary
   - WSL detection flag
 
+### Process Inspection
+- **`get_process_list`** - Returns a lightweight list of running processes with names and PIDs
+- **`get_process_by_id`** - Returns detailed Linux process information for one PID
+- **`get_process_by_name`** - Returns paged detailed process information for a process name
+  - Defaults to `page_number=1`
+  - Defaults to `page_size=5`
+  - Keeps the list-first, detail-second teaching flow from the original demo
+
 ## Projects
 
 ### `src/mcp_linux_diag_server/server.py`
-The stdio MCP server exposing the Milestone 1 `get_system_info` tool.
+The stdio MCP server exposing the Milestone 2 diagnostics and process inspection tools.
 
 ### `src/mcp_linux_diag_server/client.py`
 The lecture chat client that:
@@ -119,11 +128,11 @@ The lecture chat client that:
 
 | Method | Visual | Interactive | LLM | Best For |
 |--------|--------|-------------|-----|----------|
-| `python3 scripts/smoke_test.py` | ❌ No | ❌ No | ❌ No | quick verification |
+| `python3 scripts/smoke_test.py` | ❌ No | ❌ No | ❌ No | quick verification of Milestone 1 + 2 tools |
 | MCP Inspector | ✅ Yes | ✅ Yes | ❌ No | development, debugging, teaching |
 | `python3 -m mcp_linux_diag_server.client` | ❌ No | ✅ Yes | ✅ Yes | lecture demo flow |
 
-For a parity-focused Milestone 1 checklist, see [M1_VALIDATION_GUIDE.md](M1_VALIDATION_GUIDE.md).
+For the Milestone 1 validation checklist that still underpins the base lecture flow, see [M1_VALIDATION_GUIDE.md](M1_VALIDATION_GUIDE.md).
 
 ## Project Structure
 
@@ -141,10 +150,13 @@ MCPPythonDemo/
 │       ├── client.py
 │       ├── server.py
 │       └── tools/
+│           ├── processes.py
 │           └── system_info.py
 ├── tests/
 │   ├── test_client.py
 │   ├── test_m1_smoke.py
+│   ├── test_m2_smoke.py
+│   ├── test_processes.py
 │   └── test_system_info.py
 ```
 
@@ -157,12 +169,12 @@ MCPPythonDemo/
 ## Milestones
 
 ✅ **Milestone 1** - Minimal diagnostics tool over stdio plus lecture chat client  
-⏳ **Milestone 2** - Process inspection  
+✅ **Milestone 2** - Process inspection  
 ⏳ **Milestone 3** - Resources and prompts  
 ⏳ **Milestone 4** - HTTP transport and security  
 ⏳ **Milestone 5+** - Elicitation, sampling, and roots
 
-This repo does **not** claim feature parity with the later C# milestones yet.
+This repo does **not** claim feature parity with Milestone 3 and beyond yet.
 
 ## License
 

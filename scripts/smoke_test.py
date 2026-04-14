@@ -35,16 +35,56 @@ async def run_server_smoke() -> dict[str, object]:
 
             tools = await session.list_tools()
             tool_names = [tool.name for tool in tools.tools]
-            if "get_system_info" not in tool_names:
-                raise RuntimeError("get_system_info tool was not advertised by the server")
+            expected_tools = {
+                "get_system_info",
+                "get_process_list",
+                "get_process_by_id",
+                "get_process_by_name",
+            }
+            if not expected_tools.issubset(tool_names):
+                missing_tools = sorted(expected_tools - set(tool_names))
+                raise RuntimeError(f"Expected tools were not advertised by the server: {missing_tools}")
 
-            result = await session.call_tool("get_system_info", {})
-            if result.isError:
-                raise RuntimeError(f"Tool call failed: {result.content}")
+            system_result = await session.call_tool("get_system_info", {})
+            if system_result.isError:
+                raise RuntimeError(f"Tool call failed: {system_result.content}")
+
+            process_list_result = await session.call_tool("get_process_list", {})
+            if process_list_result.isError:
+                raise RuntimeError(f"Process list tool failed: {process_list_result.content}")
+
+            process_list = process_list_result.structuredContent
+            if isinstance(process_list, dict) and "result" in process_list:
+                process_list = process_list["result"]
+            if not isinstance(process_list, list) or not process_list:
+                raise RuntimeError("Expected get_process_list to return at least one process")
+
+            process_detail = None
+            process_page = None
+            for process_entry in process_list[:10]:
+                process_id = process_entry["process_id"]
+                process_name = process_entry["process_name"]
+
+                process_detail_result = await session.call_tool("get_process_by_id", {"process_id": process_id})
+                if process_detail_result.isError:
+                    continue
+
+                process_page_result = await session.call_tool("get_process_by_name", {"process_name": process_name})
+                if process_page_result.isError:
+                    continue
+
+                process_detail = process_detail_result.structuredContent
+                process_page = process_page_result.structuredContent
+                break
+
+            if process_detail is None or process_page is None:
+                raise RuntimeError("Unable to complete live process detail smoke calls")
 
             return {
                 "tools": tool_names,
-                "system_info": result.structuredContent,
+                "system_info": system_result.structuredContent,
+                "process_sample": process_detail,
+                "process_page": process_page,
             }
 
 

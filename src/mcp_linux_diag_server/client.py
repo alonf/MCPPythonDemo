@@ -22,6 +22,8 @@ DEFAULT_SYSTEM_PROMPT = (
     "You are a helpful Linux diagnostics assistant. "
     "You can call MCP tools that inspect the current Linux or WSL machine. "
     "When the user asks about the system, use get_system_info before answering. "
+    "When the user asks about processes, list them first and then use get_process_by_id "
+    "or get_process_by_name for detail. "
     "Keep answers concise, practical, and grounded in tool results."
 )
 AZURE_OPENAI_SCOPE = "https://cognitiveservices.azure.com/.default"
