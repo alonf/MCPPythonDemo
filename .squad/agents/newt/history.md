@@ -27,6 +27,7 @@
 - Final M6 re-review passed once the smoke harness sampled the real contract (`/proc/...` or `/proc/... | grep FIELD`); acceptance evidence is now concrete: `python3 -m unittest discover -s tests -q` passed with 60 tests and `python3 scripts/smoke_test.py` completed green with the diagnostics lane exercising `troubleshoot_linux_diagnostics`.
 - Reviewer-grade M6 acceptance depends on both parity surface and runnable proof: tool discovery, prompt discovery, client sampling support, validation/retry coverage, and the published smoke command must all agree on the same sampling callback contract.
 - Rename-only follow-ups still need runnable proof: verify the milestone-labeled module path is gone from live code (`src/`, `tests/`, `scripts/`, docs/skills), confirm the domain-based import path loads through package exports, and rerun the full M6 regression lane (`python3 -m unittest discover -s tests -q` plus `python3 scripts/smoke_test.py`) before accepting the branch state.
+- M7 QA should use one HTTP integration suite to prove both the new sandbox surface (`create_proc_snapshot`, `request_proc_access`, `proc://snapshot/...`) and additive safety guarantees, while still asserting the M3-M6 tools/prompts/resources remain discoverable as an unchanged subset.
 
 ---
 
