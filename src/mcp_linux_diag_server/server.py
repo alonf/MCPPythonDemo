@@ -1,4 +1,4 @@
-"""Milestone 6 MCP server entrypoint."""
+"""Milestone 7 MCP server entrypoint."""
 
 import argparse
 from typing import Annotated
@@ -18,30 +18,36 @@ from mcp_linux_diag_server.http_config import (
     DEMO_API_KEY,
     build_mcp_url,
 )
-from mcp_linux_diag_server.tools import (
-    BasicProcessInfo,
-    KillProcessResult,
-    LogSnapshotSummary,
-    ProcessDetailResult,
-    ProcessQueryResult,
-    SystemInfoResult,
-    collect_system_info,
-    create_log_snapshot as collect_log_snapshot,
-    get_process_by_id as collect_process_by_id,
-    get_processes_by_name as collect_processes_by_name,
-    kill_process as perform_kill_process,
-    render_log_snapshot_resource,
-    list_processes as collect_process_list,
-    troubleshoot_linux_diagnostics as run_linux_diagnostics,
-)
+    from mcp_linux_diag_server.tools import (
+        BasicProcessInfo,
+        KillProcessResult,
+        LogSnapshotSummary,
+        ProcAccessResult,
+        ProcSnapshotSummary,
+        ProcessDetailResult,
+        ProcessQueryResult,
+        SystemInfoResult,
+        collect_system_info,
+        create_log_snapshot as collect_log_snapshot,
+        create_proc_snapshot as collect_proc_snapshot,
+        get_process_by_id as collect_process_by_id,
+        get_processes_by_name as collect_processes_by_name,
+        request_proc_access as perform_request_proc_access,
+        kill_process as perform_kill_process,
+        render_log_snapshot_resource,
+        render_proc_snapshot_resource,
+        list_processes as collect_process_list,
+        troubleshoot_linux_diagnostics as run_linux_diagnostics,
+    )
 
 server = FastMCP(
     name="Linux Diagnostics Demo",
     instructions=(
-        "Milestone 6 teaching server. Use tools to collect Linux diagnostics, "
+        "Milestone 7 teaching server. Use tools to collect Linux diagnostics, "
         "read snapshot resources for larger results, discover prompts for guided workflows, "
         "connect over authenticated HTTP transport, require explicit elicitation before risky actions, "
-        "and use sampling-assisted Linux diagnostics for deeper /proc and /sys inspection."
+        "use sampling-assisted Linux diagnostics for deeper /proc and /sys inspection, "
+        "and request proc/sys root access before snapshotting blocked paths outside the default sandbox."
     ),
     host=DEFAULT_HTTP_HOST,
     port=DEFAULT_HTTP_PORT,
@@ -162,6 +168,46 @@ async def troubleshoot_linux_diagnostics(
 
 
 @server.tool(
+    name="create_proc_snapshot",
+    title="Create Proc Snapshot",
+    description=(
+        "Create an immutable read-only snapshot of an allowed /proc or /sys path and return a resource URI. "
+        "If the path is outside the current allowed roots, call request_proc_access first."
+    ),
+)
+def create_proc_snapshot(
+    path: Annotated[
+        str,
+        Field(description="Absolute /proc or /sys path to snapshot. The path must be inside the current allowed roots."),
+    ],
+) -> ProcSnapshotSummary:
+    """Create a read-only proc/sys snapshot and return the resource URIs needed to read it."""
+    return collect_proc_snapshot(path)
+
+
+@server.tool(
+    name="request_proc_access",
+    title="Request Proc Access",
+    description=(
+        "Use elicitation to request read-only access to an additional /proc or /sys root before calling create_proc_snapshot."
+    ),
+)
+async def request_proc_access(
+    ctx: Context,
+    path: Annotated[
+        str,
+        Field(description="Absolute /proc or /sys path to add to the in-memory allowed roots when approved."),
+    ],
+    reason: Annotated[
+        str | None,
+        Field(description="Optional reason shown to the user when requesting expanded proc/sys access."),
+    ] = None,
+) -> ProcAccessResult:
+    """Request access to an additional proc/sys root via elicitation."""
+    return await perform_request_proc_access(path=path, reason=reason, ctx=ctx)
+
+
+@server.tool(
     name="create_log_snapshot",
     title="Create Log Snapshot",
     description=(
@@ -209,6 +255,30 @@ def get_log_snapshot_resource(snapshot_id: str) -> str:
 def get_log_snapshot_resource_page(snapshot_id: str, limit: int, offset: int) -> str:
     """Read one page of a stored Linux log snapshot."""
     return render_log_snapshot_resource(snapshot_id, limit=limit, offset=offset)
+
+
+@server.resource(
+    "proc://snapshot/{snapshot_id}",
+    name="Proc Snapshot",
+    title="Proc Snapshot",
+    description="Read a stored proc/sys snapshot using the default limit=50 and offset=0.",
+    mime_type="application/json",
+)
+def get_proc_snapshot_resource(snapshot_id: str) -> str:
+    """Read a stored proc/sys snapshot."""
+    return render_proc_snapshot_resource(snapshot_id)
+
+
+@server.resource(
+    "proc://snapshot/{snapshot_id}?limit={limit}&offset={offset}",
+    name="Paged Proc Snapshot",
+    title="Paged Proc Snapshot",
+    description="Read a stored proc/sys snapshot with explicit pagination.",
+    mime_type="application/json",
+)
+def get_proc_snapshot_resource_page(snapshot_id: str, limit: int, offset: int) -> str:
+    """Read one page of a stored proc/sys snapshot."""
+    return render_proc_snapshot_resource(snapshot_id, limit=limit, offset=offset)
 
 
 @server.prompt(
@@ -278,7 +348,7 @@ def detect_security_anomalies(
 def troubleshoot_linux_component(
     component: Annotated[str, Field(description="Subsystem or concern to inspect, such as dirty memory pages or CPU load.")] = "the user's issue",
 ) -> str:
-    """Guide a focused Milestone 6 troubleshooting workflow."""
+    """Guide a focused Milestone 7 troubleshooting workflow."""
     return (
         "You are a Linux internals specialist.\n"
         f"The user wants a deep inspection of: {component}.\n\n"
@@ -286,7 +356,9 @@ def troubleshoot_linux_component(
         "1. Do not start with the broad DiagnoseSystemHealth prompt for this focused request.\n"
         "2. Call `troubleshoot_linux_diagnostics` with the user's natural-language request.\n"
         "3. Use the tool's diagnosis as the primary answer because the server validated the sampled query.\n"
-        "4. Only fall back to broader process or log tools if the tool reports that the request is outside the allowlisted sources."
+        "4. If you need a specific /proc or /sys path that is outside the current allowed roots, call "
+        "`request_proc_access` before attempting `create_proc_snapshot`.\n"
+        "5. Only fall back to broader process or log tools if the focused diagnostics remain outside the supported sources."
     )
 
 
@@ -305,8 +377,10 @@ def diagnose_system_health(
         "2. Call `get_process_list` and use detail lookups for the most relevant PIDs.\n"
         "3. Create a `system` log snapshot filtered to "
         f"`{search_text}` and read it with `read_resource` using pagination when needed.\n"
-        "4. Correlate process churn, memory pressure, or restart loops with the log evidence.\n"
-        "5. Return an overall health summary, top risks, and the next diagnostic actions."
+        "4. When you need a direct /proc or /sys snapshot outside the default sandbox, call `request_proc_access` "
+        "before `create_proc_snapshot`.\n"
+        "5. Correlate process churn, memory pressure, or restart loops with the log and snapshot evidence.\n"
+        "6. Return an overall health summary, top risks, and the next diagnostic actions."
     )
 
 
@@ -317,7 +391,7 @@ def create_http_app():
 
 def build_parser() -> argparse.ArgumentParser:
     """Create the CLI parser for the HTTP MCP server."""
-    parser = argparse.ArgumentParser(description="Run the Milestone 6 Linux diagnostics MCP server over HTTP.")
+    parser = argparse.ArgumentParser(description="Run the Milestone 7 Linux diagnostics MCP server over HTTP.")
     parser.add_argument("--host", default=DEFAULT_HTTP_HOST, help=f"HTTP host to bind. Defaults to {DEFAULT_HTTP_HOST}.")
     parser.add_argument("--port", type=int, default=DEFAULT_HTTP_PORT, help=f"HTTP port to bind. Defaults to {DEFAULT_HTTP_PORT}.")
     return parser

@@ -39,3 +39,12 @@ You need a Python MCP server/client pair to support safe server-driven form elic
 - `src/mcp_linux_diag_server/client.py`
 - `tests/test_processes.py`
 - `tests/test_m5_http.py`
+
+## QA Pattern
+
+- For integration tests, use a schema-driven callback that inspects the single elicited field and auto-fills:
+  - matching `oneOf` / `enum` path options when present
+  - `True` for boolean approvals
+  - quoted confirmation phrases when the schema description demands exact text
+  - the requested path or a stable QA reason for free-text fields
+- This keeps access/approval tests reusable even when the server changes the exact elicitation schema shape but preserves the single-field MCP form contract.
