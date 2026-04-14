@@ -1,6 +1,5 @@
 # Local-only repo helpers
 .copilot/
-.squad/
 MCPDemo_upstream/
 
 # Python project artifacts
@@ -21,3 +20,4 @@ Desktop.ini
 *.tmp
 *.bak
 docs/Season_of_AI_5_MCP.pdf
+.squad-workstream

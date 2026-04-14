@@ -1,0 +1,44 @@
+{
+  "universe_usage_history": [
+    {
+      "assignment_id": "mcppythondemo-2026-04-13",
+      "project": "MCPPythonDemo",
+      "universe": "Alien",
+      "started_at": "2026-04-13T21:30:48.993Z"
+    }
+  ],
+  "assignment_cast_snapshots": {
+    "mcppythondemo-2026-04-13": {
+      "project": "MCPPythonDemo",
+      "universe": "Alien",
+      "created_at": "2026-04-13T21:30:48.993Z",
+      "members": [
+        {
+          "agent_id": "ripley",
+          "name": "Ripley",
+          "role": "Lead"
+        },
+        {
+          "agent_id": "bishop",
+          "name": "Bishop",
+          "role": "MCP/C# Expert"
+        },
+        {
+          "agent_id": "ash",
+          "name": "Ash",
+          "role": "Python Dev"
+        },
+        {
+          "agent_id": "newt",
+          "name": "Newt",
+          "role": "Tester"
+        },
+        {
+          "agent_id": "dallas",
+          "name": "Dallas",
+          "role": "Linux Diagnostics Expert"
+        }
+      ]
+    }
+  }
+}
