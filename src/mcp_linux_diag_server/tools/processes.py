@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import pwd
+import signal
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+import mcp.types as types
+from mcp.server.fastmcp import Context
 from pydantic import BaseModel, Field
 
 _PROC_ROOT = Path("/proc")
@@ -16,6 +20,8 @@ _PROC_STAT = _PROC_ROOT / "stat"
 _DEFAULT_PAGE_SIZE = 5
 _CLOCK_TICKS = os.sysconf("SC_CLK_TCK")
 _PAGE_SIZE = os.sysconf("SC_PAGE_SIZE")
+_CPU_SAMPLE_SECONDS = 0.75
+_TERMINATION_TIMEOUT_SECONDS = 5.0
 
 
 class BasicProcessInfo(BaseModel):
@@ -62,9 +68,74 @@ class ProcessQueryResult(BaseModel):
     has_more: bool = Field(description="True when another page of results is available.")
 
 
+class ProcessCpuUsage(BaseModel):
+    """CPU-sampled process candidate used by the Milestone 5 kill flow."""
+
+    process_id: int = Field(description="Linux process identifier.")
+    process_name: str = Field(description="Short process name from /proc.")
+    working_set_bytes: int = Field(description="Resident memory estimate in bytes.")
+    cpu_percent: float = Field(description="CPU percent sampled over a short interval.")
+
+
+class KillProcessResult(BaseModel):
+    """Outcome payload for the Milestone 5 kill_process tool."""
+
+    process_id: int = Field(description="Target process ID, or -1 when no process was selected.")
+    process_name: str = Field(description="Resolved process name when available.")
+    status: str = Field(description="Outcome status: terminated, cancelled, not-found, or failed.")
+    message: str = Field(description="Human-readable outcome message.")
+    reason: str | None = Field(default=None, description="Optional user-provided reason for the action.")
+
+    @classmethod
+    def success(cls, process_id: int, process_name: str, reason: str | None) -> KillProcessResult:
+        return cls(
+            process_id=process_id,
+            process_name=process_name,
+            status="terminated",
+            message=f"Process {process_name} (PID {process_id}) was terminated successfully.",
+            reason=reason,
+        )
+
+    @classmethod
+    def cancelled(cls, message: str) -> KillProcessResult:
+        return cls(
+            process_id=-1,
+            process_name="",
+            status="cancelled",
+            message=message,
+        )
+
+    @classmethod
+    def not_found(cls, process_id: int) -> KillProcessResult:
+        return cls(
+            process_id=process_id,
+            process_name="",
+            status="not-found",
+            message=f"No process found with PID {process_id}.",
+        )
+
+    @classmethod
+    def failed(
+        cls,
+        process_id: int,
+        process_name: str,
+        error_message: str,
+        *,
+        reason: str | None = None,
+    ) -> KillProcessResult:
+        return cls(
+            process_id=process_id,
+            process_name=process_name,
+            status="failed",
+            message=f"Failed to terminate {process_name} (PID {process_id}): {error_message}",
+            reason=reason,
+        )
+
+
 @dataclass(slots=True)
 class _StatSnapshot:
     process_name: str
+    state: str
     parent_process_id: int
     user_ticks: int
     system_ticks: int
@@ -72,6 +143,14 @@ class _StatSnapshot:
     start_ticks: int
     virtual_memory_bytes: int
     resident_pages: int
+
+
+@dataclass(slots=True)
+class _ProcessRuntimeSnapshot:
+    process_id: int
+    process_name: str
+    working_set_bytes: int
+    total_cpu_ticks: int
 
 
 def list_processes() -> list[BasicProcessInfo]:
@@ -126,6 +205,112 @@ def get_processes_by_name(
         page_size=actual_page_size,
         total_count=len(matches),
         has_more=end_index < len(matches),
+    )
+
+
+async def kill_process(
+    process_id: int | None = None,
+    reason: str | None = None,
+    *,
+    ctx: Context,
+) -> KillProcessResult:
+    """Terminate a process only after server-driven elicitation confirms intent."""
+    if not _client_supports_form_elicitation(ctx):
+        raise RuntimeError(
+            "Client does not support elicitation. "
+            "A client that can fulfill form elicitation is required for killProcess."
+        )
+
+    candidate: ProcessCpuUsage | None
+    if process_id is None:
+        candidates = [item for item in await sample_top_cpu_processes(take=5) if not _is_protected_process_id(item.process_id)]
+        if not candidates:
+            raise RuntimeError("Unable to locate any safe running processes. Try again in a moment.")
+        candidate = await _elicit_process_selection(ctx, candidates)
+        if candidate is None:
+            return KillProcessResult.cancelled("Process selection was cancelled by the user.")
+    else:
+        candidate = get_process_candidate_by_id(process_id)
+        if candidate is None:
+            return KillProcessResult.not_found(process_id)
+        if _is_protected_process_id(process_id):
+            return KillProcessResult.failed(
+                process_id,
+                candidate.process_name,
+                "Refusing to terminate the active demo server or its parent process.",
+                reason=reason,
+            )
+
+    confirmed = await _elicit_confirmation(ctx, candidate)
+    if not confirmed:
+        return KillProcessResult.cancelled("User declined to confirm the termination phrase.")
+
+    try:
+        await _terminate_process(candidate.process_id)
+    except ProcessLookupError:
+        return KillProcessResult.not_found(candidate.process_id)
+    except PermissionError as exc:
+        return KillProcessResult.failed(candidate.process_id, candidate.process_name, str(exc), reason=reason)
+    except OSError as exc:
+        return KillProcessResult.failed(candidate.process_id, candidate.process_name, str(exc), reason=reason)
+
+    return KillProcessResult.success(candidate.process_id, candidate.process_name, reason)
+
+
+async def sample_top_cpu_processes(*, take: int = 5) -> list[ProcessCpuUsage]:
+    """Sample the current top CPU consumers using two /proc snapshots."""
+    initial = _capture_runtime_snapshot()
+    await asyncio.sleep(_CPU_SAMPLE_SECONDS)
+    later = _capture_runtime_snapshot()
+    processor_count = max(os.cpu_count() or 1, 1)
+    interval_milliseconds = _CPU_SAMPLE_SECONDS * 1000.0
+
+    candidates = [
+        ProcessCpuUsage(
+            process_id=sample.process_id,
+            process_name=sample.process_name,
+            working_set_bytes=sample.working_set_bytes,
+            cpu_percent=round(
+                max(sample.total_cpu_ticks - initial[sample.process_id].total_cpu_ticks, 0)
+                / _CLOCK_TICKS
+                * 1000.0
+                / (interval_milliseconds * processor_count)
+                * 100.0,
+                1,
+            ),
+        )
+        for sample in later.values()
+        if sample.process_id in initial
+    ]
+    candidates = [candidate for candidate in candidates if candidate.working_set_bytes > 0]
+    candidates.sort(key=lambda item: (-item.cpu_percent, -item.working_set_bytes, item.process_id))
+
+    if candidates:
+        return candidates[:take]
+
+    fallback = [
+        ProcessCpuUsage(
+            process_id=sample.process_id,
+            process_name=sample.process_name,
+            working_set_bytes=sample.working_set_bytes,
+            cpu_percent=0.0,
+        )
+        for sample in later.values()
+    ]
+    fallback.sort(key=lambda item: (-item.working_set_bytes, item.process_id))
+    return fallback[:take]
+
+
+def get_process_candidate_by_id(process_id: int) -> ProcessCpuUsage | None:
+    """Return the M5 candidate view for one PID."""
+    detail = _read_process_detail(process_id)
+    if detail is None:
+        return None
+    return ProcessCpuUsage(
+        process_id=detail.process_id,
+        process_name=detail.process_name,
+        working_set_bytes=detail.memory.resident_set_bytes,
+        cpu_percent=0.0,
     )
 
 
@@ -248,6 +433,7 @@ def _read_stat_snapshot(process_id: int) -> _StatSnapshot | None:
     try:
         return _StatSnapshot(
             process_name=process_name,
+            state=fields[0],
             parent_process_id=int(fields[1]),
             user_ticks=int(fields[11]),
             system_ticks=int(fields[12]),
@@ -377,3 +563,146 @@ def _normalize_process_name(value: str) -> str:
     if candidate.endswith(".exe"):
         candidate = candidate[:-4]
     return candidate
+
+
+def _capture_runtime_snapshot() -> dict[int, _ProcessRuntimeSnapshot]:
+    snapshot: dict[int, _ProcessRuntimeSnapshot] = {}
+    for process_id in _iter_process_ids():
+        stat_snapshot = _read_stat_snapshot(process_id)
+        if stat_snapshot is None:
+            continue
+        snapshot[process_id] = _ProcessRuntimeSnapshot(
+            process_id=process_id,
+            process_name=stat_snapshot.process_name,
+            working_set_bytes=max(stat_snapshot.resident_pages * _PAGE_SIZE, 0),
+            total_cpu_ticks=stat_snapshot.user_ticks + stat_snapshot.system_ticks,
+        )
+    return snapshot
+
+
+def _client_supports_form_elicitation(ctx: Context) -> bool:
+    session = ctx.request_context.session
+    return session.check_client_capability(
+        types.ClientCapabilities(
+            elicitation=types.ElicitationCapability(form=types.FormElicitationCapability())
+        )
+    )
+
+
+async def _elicit_process_selection(ctx: Context, candidates: list[ProcessCpuUsage]) -> ProcessCpuUsage | None:
+    response = await ctx.request_context.session.elicit_form(
+        "Select one of the top CPU consumers to terminate. Only a handful are shown for safety.",
+        _build_process_selection_schema(candidates),
+        ctx.request_id,
+    )
+    if response.action != "accept":
+        return None
+
+    selected_value = (response.content or {}).get("process")
+    try:
+        selected_pid = int(str(selected_value))
+    except (TypeError, ValueError):
+        return None
+
+    return next((candidate for candidate in candidates if candidate.process_id == selected_pid), None) or get_process_candidate_by_id(selected_pid)
+
+
+async def _elicit_confirmation(ctx: Context, process: ProcessCpuUsage) -> bool:
+    confirmation_phrase = f"CONFIRM PID {process.process_id}"
+    response = await ctx.request_context.session.elicit_form(
+        f"You are about to terminate {process.process_name} (PID {process.process_id}). This cannot be undone.",
+        _build_confirmation_schema(process.process_id),
+        ctx.request_id,
+    )
+    provided = (response.content or {}).get("confirmation")
+    return response.action == "accept" and isinstance(provided, str) and provided.strip().lower() == confirmation_phrase.lower()
+
+
+def _build_process_selection_schema(candidates: list[ProcessCpuUsage]) -> dict[str, object]:
+    return {
+        "type": "object",
+        "properties": {
+            "process": {
+                "type": "string",
+                "title": "Process",
+                "description": "Select the process you want to terminate.",
+                "oneOf": [
+                    {"const": str(candidate.process_id), "title": _format_process_candidate(candidate)}
+                    for candidate in candidates
+                ],
+            }
+        },
+        "required": ["process"],
+        "additionalProperties": False,
+    }
+
+
+def _build_confirmation_schema(process_id: int) -> dict[str, object]:
+    confirmation_phrase = f"CONFIRM PID {process_id}"
+    return {
+        "type": "object",
+        "properties": {
+            "confirmation": {
+                "type": "string",
+                "title": "Confirmation Phrase",
+                "description": f"Type '{confirmation_phrase}' to confirm termination.",
+                "minLength": len(confirmation_phrase),
+            }
+        },
+        "required": ["confirmation"],
+        "additionalProperties": False,
+    }
+
+
+def _format_process_candidate(candidate: ProcessCpuUsage) -> str:
+    return (
+        f"{candidate.process_name} (PID {candidate.process_id}) • "
+        f"CPU {candidate.cpu_percent:.1f}% • RAM {_format_bytes(candidate.working_set_bytes)}"
+    )
+
+
+def _format_bytes(byte_count: int) -> str:
+    sizes = ["B", "KB", "MB", "GB", "TB"]
+    size = float(max(byte_count, 0))
+    order = 0
+    while size >= 1024 and order < len(sizes) - 1:
+        size /= 1024
+        order += 1
+    return f"{size:0.1f} {sizes[order]}"
+
+
+def _is_protected_process_id(process_id: int) -> bool:
+    current_pid = os.getpid()
+    return process_id in {current_pid, os.getppid()}
+
+
+async def _terminate_process(process_id: int) -> None:
+    if _is_protected_process_id(process_id):
+        raise OSError("Refusing to terminate the active demo server or its parent process.")
+
+    os.kill(process_id, signal.SIGTERM)
+    if await _wait_for_exit(process_id, timeout_seconds=_TERMINATION_TIMEOUT_SECONDS):
+        return
+
+    os.kill(process_id, signal.SIGKILL)
+    if await _wait_for_exit(process_id, timeout_seconds=_TERMINATION_TIMEOUT_SECONDS):
+        return
+
+    raise OSError("Process did not exit after SIGTERM and SIGKILL.")
+
+
+async def _wait_for_exit(process_id: int, *, timeout_seconds: float) -> bool:
+    deadline = asyncio.get_running_loop().time() + timeout_seconds
+    while asyncio.get_running_loop().time() < deadline:
+        if _process_has_exited(process_id):
+            return True
+        await asyncio.sleep(0.1)
+
+    return _process_has_exited(process_id)
+
+
+def _process_has_exited(process_id: int) -> bool:
+    stat_snapshot = _read_stat_snapshot(process_id)
+    if stat_snapshot is None:
+        return True
+    return stat_snapshot.state == "Z"

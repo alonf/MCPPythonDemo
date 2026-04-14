@@ -408,3 +408,60 @@ Correction documented in: .squad/decisions/inbox/bishop-m1-corrected-branch-spec
 **Medium risk:** Async cancellation handling; Python `asyncio.CancelledError` semantics differ slightly from C# `OperationCanceledException`. Mitigation: explicit timeout enforcement.
 
 **Decision documented to:** `.squad/decisions/inbox/bishop-m5-delta.md` (13.4KB comprehensive analysis)
+
+---
+
+## Learnings (2026-04-14T17:00Z M5 Python Elicitation Analysis)
+
+### Python MCP SDK Elicitation Support: FULL PARITY CONFIRMED
+
+**Finding:** Python MCP 1.27.0+ fully supports form elicitation with a mature, clean API. Parity with C# M5 is HIGH.
+
+**Evidence:**
+- Installed: `mcp==1.27.0` in venv
+- Types present: `ElicitRequestFormParams`, `ElicitResult`, `FormElicitationCapability`, `ElicitationCapability`
+- ServerSession methods: `elicit()`, `elicit_form()` (primary), `elicit_url()`
+- Context methods: `ctx.elicit(message, schema)` (type-safe Pydantic-based)
+- Capability checking: `ctx.session.client_params.capabilities.elicitation.form` (None if unsupported)
+
+**Callable Surface:**
+```python
+# Tool handler gets Context parameter (injected by @server.tool() decorator)
+# Tool must be async def to access Context properly
+
+result: ElicitationResult = ctx.elicit(
+    message="Select a process",
+    schema=ProcessSelectionSchema  # Pydantic BaseModel, not dict
+)
+
+# result.action: "accept" | "decline" | "cancel"
+# result.data: instance of schema if action=="accept", else None
+```
+
+**Key Differences vs C#:**
+1. **Schema definition:** Python uses Pydantic BaseModel (type-safe) vs C# raw RequestSchema dict (more flexible but less safe)
+2. **Capability access:** `ctx.session.client_params.capabilities.elicitation.form` (required check before calling elicit)
+3. **Validation:** Pydantic auto-validates schema fields; invalid input → decline (no manual validation needed)
+4. **Async requirement:** Must be `async def` tool; sync tools cannot access Context
+
+**Parity Table:**
+| Aspect | C# M5 | Python 1.27.0 | Status |
+|--------|-------|--------------|--------|
+| Form elicitation method | `ElicitAsync()` | `ctx.elicit()` | ✅ Equivalent |
+| Schema definition | Dict-based | Pydantic BaseModel | ✅ Equivalent (Python more type-safe) |
+| Capability check | `ClientCapabilities.Elicitation.Form` | `capabilities.elicitation.form` | ✅ Equivalent |
+| Result structure | `{ action, content }` | `{ action, data, _meta }` | ✅ Equivalent |
+| Action values | "accept"\|"decline"\|"cancel" | "accept"\|"decline"\|"cancel" | ✅ Identical |
+| Async support | Task<> | async/await | ✅ Identical |
+
+**No workarounds needed:** Parity is direct; Python implementation can follow C# M5 spec almost verbatim, with language-specific adaptations (Pydantic schemas, async/await, `/proc` instead of Win32 APIs).
+
+**Implementation impact:**
+- ~200 lines for `kill_process` tool + helpers
+- ~150 lines for CPU sampling (750ms interval via `/proc` stats)
+- No new dependencies (Pydantic + psutil already available)
+- Capability check is **mandatory** (unlike C# where it's optional best-practice)
+
+**Decision:** Recommend full M5 parity implementation. Timeline: 1–2 days. Risk factors: CPU% precision on loaded systems, SIGKILL fallback timing.
+
+**Documented to:** `.squad/decisions/inbox/bishop-python-elicitation.md` (15.2KB detailed specification)

@@ -178,3 +178,100 @@ Ready for Ash to spawn on M1 STDIO server. Bishop to finalize repo/branch conven
 - All data sources (os-release, /proc/uptime, /proc/cpuinfo) tested non-root readable on WSL and bare-metal
 - M2+ roadmap: Event log parity via syslog/journalctl; process metrics via /proc/[pid]/stat
 - Status: M1 Linux diagnostics scope locked; ready for M2 planning
+
+---
+
+## Session: M5 Linux Diagnostics Review for Process Termination (2026-04-14T16:45Z)
+
+### Task
+Review Milestone 5 parity target from Linux diagnostics perspective; provide implementation guidance for process termination with elicitation.
+
+### Key Findings
+
+**CPU Sampling (750ms window) — VERIFIED SAFE:**
+- Data source: `/proc/[pid]/stat` fields 14–15 (utime + stime in clock ticks)
+- Formula: `(cpu_delta_ticks / cpu_count) / (750ms * SC_CLK_TCK/1000) * 100`
+- Stable since Linux 2.2; works on all architectures
+- Race-safe: Process exit leaves zombie window (~100ms); safe to handle gracefully
+
+**Process Termination — SIGTERM → SIGKILL:**
+- SIGTERM (15): Allow cleanup; process can trap or ignore
+- SIGKILL (9): Forceful; kernel-side termination after 5s timeout
+- Use `os.kill()` and `signal` module (POSIX standard)
+- Check `/proc/[pid]/` disappearance or `os.kill(pid, 0)` no-op to detect exit
+
+**Linux-Specific Quirks (ASH MUST RESPECT):**
+1. **Permission model:** Non-root cannot kill other users' processes; graceful error
+2. **Zombie filtering:** Skip state='Z' from elicitation list; can't be signaled
+3. **Daemon warnings:** Read `/proc/[pid]/comm`; warn before killing sshd, systemd, etc.
+4. **Namespace awareness:** Detect via `/proc/[pid]/ns/pid` inode comparison; warn if cross-namespace
+5. **Container detection:** Check `/proc/self/cgroup` for docker/lxc; report in logs
+6. **WSL2 protection:** Block PID 1–10 (custom init); severe warning or block entirely
+
+**Parity-Critical Constraints for Ash:**
+- Elicitation client capability check before form display
+- Top 5 CPU processes: sort by CPU% desc, secondary sort by RAM desc
+- Confirmation phrase: case-insensitive exact match "CONFIRM PID {pid}"
+- Result struct: process_id, process_name, status, message, reason (all required)
+- Status values: "terminated", "cancelled", "not-found", "failed", "permission-denied"
+
+### Deliverables
+
+1. **Written to `.squad/decisions/inbox/dallas-m5-linux.md`:**
+   - Complete CPU sampling formula with derivation
+   - Signal sequence (SIGTERM → SIGKILL) with Python API
+   - All permission/zombie/namespace/WSL edge cases with Ash responsibilities
+   - Parity-critical constraints (5 must-haves, 4 nice-to-haves)
+   - Risk matrix for implementation
+
+2. **Stability Notes for Team:**
+   - `/proc/[pid]/stat` stable kernel interface since 1999
+   - `os.cpu_count()`, `os.sysconf("SC_CLK_TCK")` guaranteed available
+   - Signal constants (SIGTERM=15, SIGKILL=9) are POSIX standard
+   - Permission model consistent across all Linux distributions
+
+### Learnings Extracted
+
+**On CPU Sampling Stability:**
+- 750ms wall-clock window is safe; process exits are handled gracefully
+- Zombie window (~100ms after exit) allows T1 snapshot to succeed
+- CPU% calculation is linear in cpu_count; no special adjustments for asymmetric cores
+- Negative delta edge case (rapid exec resets timers) rare but should be handled (max(delta,0))
+
+**On Process Termination in Linux:**
+- No graceful tree-kill API (unlike Windows); single-PID SIGTERM is closest equivalent
+- Daemons reparenting to PID 1 is normal (init adoption); not a blocker
+- Zombie processes (state='Z') cannot be signaled; only parent can reap via wait()
+- Permission model is per-UID, not per-process; root bypass is CAP_KILL only
+
+**On Container & Namespace Semantics:**
+- Container boundaries are kernel-opaque; bulk process scan only sees local namespace
+- Cross-namespace kill requires privileged escalation or container tools (not a blocker)
+- PID namespaces are detected via inode comparison; WSL is detectable via /proc/version
+
+**On WSL2 Specific Behavior:**
+- PID 1 is custom init, not systemd; killing it stops entire WSL session
+- SC_CLK_TCK correct on WSL2; no adjustments needed for CPU sampling
+- Interop processes (Windows via WSL interop) are visible but killing is unpredictable; warn
+- Detection: Check `/proc/version` for "microsoft" or "WSL" string
+
+### Skill Extraction
+
+**Reusable Pattern: Process Snapshot Dataclass**
+- Encapsulates safe CPU delta calculation and ranking logic
+- Use for both elicitation sampling and multi-tool CPU investigations
+- Fields: pid, name, utime_ticks, stime_ticks, vms_bytes, rss_bytes, state, ppid, uid, is_readable
+- Ranking: `sorted(snapshots, key=lambda s: (-cpu_percent(s, t0), -s.rss_bytes))`[:5]
+
+**Reusable Pattern: Permission-Aware Process Filtering**
+- Try-continue on /proc read failures; only error on explicit single-PID requests
+- Check UID before offering kill; graceful "permission-denied" result if not killable
+- Pre-filter zombies (state='Z') from elicitation lists; report "already dead" if selected
+
+### Recommendation for Ash
+
+Implement full M5 parity with all edge-case protections. The constraints are not "nice-to-have ergonomics"; they are **binding** for safety and educating students on Linux permission, namespace, and lifecycle semantics.
+
+**No code changes needed from Dallas:** Decision written; ready for Ash's implementation review.
+
+---

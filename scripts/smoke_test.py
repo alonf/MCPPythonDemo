@@ -215,6 +215,7 @@ async def _run_sdk_http_checks(*, port: int) -> dict[str, Any]:
                     "get_process_by_id",
                     "get_process_by_name",
                     "create_log_snapshot",
+                    "kill_process",
                 }
                 if not expected_tools.issubset(tool_names):
                     missing_tools = sorted(expected_tools - set(tool_names))
@@ -294,6 +295,13 @@ async def _run_sdk_http_checks(*, port: int) -> dict[str, Any]:
                 if '"pagination"' not in rendered_snapshot:
                     raise RuntimeError("Expected log snapshot resource to include pagination metadata")
 
+                kill_result = await session.call_tool("kill_process", {"process_id": 999999})
+                if not kill_result.isError:
+                    raise RuntimeError("Expected kill_process to fail safely without elicitation support")
+                kill_text = "\n".join(item.text for item in kill_result.content if hasattr(item, "text"))
+                if "Client does not support elicitation" not in kill_text:
+                    raise RuntimeError(f"Unexpected kill_process safety error: {kill_text}")
+
                 return {
                     "session_id": session_id,
                     "tools": tool_names,
@@ -303,6 +311,7 @@ async def _run_sdk_http_checks(*, port: int) -> dict[str, Any]:
                     "process_sample": process_detail,
                     "process_page": process_page,
                     "log_snapshot": snapshot_payload,
+                    "kill_process_error": kill_text,
                 }
 
 

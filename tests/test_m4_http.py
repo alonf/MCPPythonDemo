@@ -120,6 +120,7 @@ class M4HttpTransportTests(unittest.TestCase):
             tool_names = {tool["name"] for tool in good_body["result"]["tools"]}
             self.assertIn("get_system_info", tool_names)
             self.assertIn("create_log_snapshot", tool_names)
+            self.assertIn("kill_process", tool_names)
 
         self.run_with_server(assertion)
 
@@ -137,6 +138,7 @@ class M4HttpTransportTests(unittest.TestCase):
                     "get_process_by_id",
                     "get_process_by_name",
                     "create_log_snapshot",
+                    "kill_process",
                 }.issubset(tool_names)
             )
 

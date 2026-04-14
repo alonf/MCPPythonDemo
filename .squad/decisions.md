@@ -1303,3 +1303,192 @@ Create `milestone-4` branch from clean `milestone-3` baseline (commit 3b3c09e: "
 **Owners:** Ripley (Lead)
 
 **Status:** Implemented
+
+---
+
+### D15: Milestone 5 Linux Diagnostics: Parity Mapping & Safest Interfaces
+
+**Decision by:** Dallas (Linux Diagnostics Expert)  
+**Status:** Ratified & Implemented  
+**Date:** 2026-04-14T14:00Z
+
+Define Linux-native semantics for M5 `kill_process` tool, including CPU sampling precision, process termination sequence, and all edge-case protections.
+
+**Executive Summary**
+
+Milestone 5 introduces process termination with user confirmation via MCP elicitation. From Linux diagnostics perspective:
+
+1. **CPU sampling over ~750ms is stable:** Use `/proc/[pid]/stat` fields 14–15 (utime+stime), rank by CPU%, apply formula: `(cpu_delta_ticks / cpu_count) / (750ms * SC_CLK_TCK/1000) * 100`
+2. **Signal semantics are standard POSIX:** SIGTERM (15) → wait 5s → SIGKILL (9); use `os.kill()` and `signal` module
+3. **Linux-specific quirks ARE binding:** Permission model, process-tree daemons, zombies, namespaces, WSL PID 1 require implementation protection logic
+
+**Key Implementation Constraints**
+
+- **CPU Sampling:** `/proc/[pid]/stat` stable since Linux 2.2; SC_CLK_TCK ~100 on all platforms; handle process exit mid-sample gracefully
+- **Termination:** SIGTERM allows cleanup; SIGKILL forceful; polling via `os.kill(pid, 0)` checks liveness
+- **Permission Model:** Filter to current UID; report permission-denied on other users' processes (non-root)
+- **Zombies:** Check `/proc/[pid]/stat` field 3; skip if state='Z' (can't be killed; parent must reap)
+- **PID Namespaces:** Container sees only local namespace PIDs; warn if target in different namespace
+- **WSL Detection:** Check `/proc/version` for "microsoft" marker; block kill of PID 1–10 (terminates WSL session)
+
+**Parity-Critical Implementation Constraints**
+
+1. **Elicitation client capability check:** Must validate before eliciting; error if not supported
+2. **Top-5 CPU process selection:** Sort by CPU% desc, RAM desc; return top 5 for safety
+3. **Confirmation phrase validation:** `CONFIRM PID {pid}` case-insensitive; exact match only
+4. **Result marshaling:** Return 5-tuple: `process_id`, `process_name`, `status`, `message`, `reason`
+5. **Status values:** "terminated", "cancelled", "not-found", "failed", "permission-denied"
+
+**Outcome:** All underlying interfaces stable (stat format since Linux 2.2+, signal constants POSIX-standard); no deviations from C# behavior except Linux-specific details (signals vs. tree-kill API, namespace awareness vs. UAC prompt).
+
+**Owners:** Dallas (Linux Diagnostics), Ash (Python Implementation)
+
+**Status:** Implemented & Validated
+
+---
+
+### D16: Python MCP SDK Elicitation Support Analysis
+
+**Decision by:** Bishop (MCP Semantics Expert)  
+**Status:** Ratified & Implemented  
+**Date:** 2026-04-14T15:00Z
+
+Validate Python MCP SDK (1.27.0) form elicitation support for M5 implementation and map C# patterns to Python API.
+
+**Executive Summary**
+
+The Python MCP SDK (1.27.0) **fully supports server-side form elicitation** with a clean, mature API:
+- ✅ Direct support: `Context.elicit(message, schema)` for form-based user interaction
+- ✅ Capability checking: Client capabilities accessible via `ServerSession`
+- ✅ Async-ready: Full async/await support for tool handlers
+- ✅ Type-safe: Pydantic model-based schema definition (more type-safe than C# dicts)
+- ✅ Result handling: `ElicitationResult` with `action` field ("accept", "decline", "cancel")
+
+**Parity with C#:** HIGH – API surface is semantically equivalent. Python approach is more modern (type-driven schemas vs. dict-based).
+
+**Key Technical Details**
+
+1. **Elicitation API:**
+   - Signature: `ctx.elicit(message: str, schema: type[T]) -> ElicitationResult[T]`
+   - Schema: Pydantic BaseModel with Field() for constraints and metadata
+   - Output: `action` ("accept", "decline", "cancel"), `data` (parsed schema or None)
+
+2. **Capability Checking (Mandatory):**
+   - Path: `ctx.session.client_params.capabilities.elicitation.form`
+   - **CRITICAL:** Must validate before calling `ctx.elicit()`; SDK does NOT auto-fail
+   - Raise descriptive error if form elicitation not supported
+
+3. **Pydantic Schema Constraints:**
+   - Primitives only: str, int, float, bool, list[str]
+   - No nested objects; use Literal for choices
+   - Field() metadata: title, description, min_length, max_length, ge/le, etc.
+
+4. **Async Requirements:**
+   - Tools with Context parameter must be `async def`
+   - Full async/await support in tool handlers
+
+**Failure Handling**
+
+When client does not support elicitation:
+```python
+if not (capabilities.elicitation and capabilities.elicitation.form):
+    raise RuntimeError(
+        "Client does not support elicitation. "
+        "A client that can fulfill form elicitation is required for kill_process."
+    )
+```
+
+**Outcomes:** No architectural barriers to M5 implementation; Python MCP SDK is production-ready for elicitation workflows. Timeline estimate 1–2 days assuming existing Linux process utilities solid.
+
+**Owners:** Bishop (MCP Semantics), Ash (Python Implementation)
+
+**Status:** Implemented & Validated
+
+---
+
+### D17: Milestone 5 Implementation — kill_process with Elicitation
+
+**Decision by:** Ash (Python Implementation Lead)  
+**Status:** Ratified & Validated  
+**Date:** 2026-04-14T15:30Z
+
+Implement M5 `kill_process` tool with server-side elicitation, CPU sampling, and all Dallas/Bishop parity constraints.
+
+**Implementation Shape**
+
+1. **CPU Sampling Helper:**
+   - Snapshot at T0: read all `/proc/[pid]/stat` in parallel
+   - Wait 750ms via `time.monotonic()`
+   - Snapshot at T1: re-read; calculate CPU% per process
+   - Filter: readable, not-zombie, killable (same UID or root)
+   - Rank: by CPU% desc, then RAM desc
+   - Return: top 5 candidates with formatted labels
+
+2. **Two-Stage Elicitation:**
+   - **Stage 1 (optional):** If no `process_id`, show process selection form with top 5
+   - **Stage 2 (mandatory):** Confirmation form requesting phrase `CONFIRM PID {pid}` (case-insensitive)
+
+3. **Termination Sequence:**
+   - Validate client supports form elicitation; raise error if not
+   - Execute elicitation stages; return cancelled status if user declines
+   - On acceptance: SIGTERM, poll `/proc/[pid]` for up to 5 seconds
+   - If still alive: SIGKILL
+   - Return result with status and message
+
+4. **Error Handling:**
+   - ProcessLookupError → status="not-found"
+   - PermissionError → status="permission-denied"
+   - User cancellation → status="cancelled"
+   - Phrase mismatch → status="failed"
+
+5. **CLI Client Integration:**
+   - Pass `elicitation_callback` only if stdin/stdout interactive
+   - Noninteractive clients fail gracefully with descriptive error
+
+**Test Coverage**
+
+- `tests/test_m5_http.py`: Dual-lane validation
+  - Lane 1: Client lacks elicitation support → tool raises error (safe failure)
+  - Lane 2: Client supports elicitation → full workflow succeeds; real subprocess terminates
+- Existing M1–M4 tests remain passing (53 total)
+
+**Outcomes:** Full M5 parity with C# reference; elicitation enforced before kill; confirmation phrase validated; all edge cases handled (zombies, permission denied, WSL, containers); tests passing.
+
+**Owners:** Ash (Python Implementation), Dallas (Linux Specs), Bishop (Elicitation API), Newt (QA)
+
+**Status:** Implemented & Validated
+
+---
+
+### D18: Milestone 5 Acceptance Decision
+
+**Decision by:** Newt (QA Lead)  
+**Status:** Accepted  
+**Date:** 2026-04-14T15:35Z
+
+**Decision:** Accept Milestone 5 as currently implemented.
+
+**Evidence**
+
+- Test suite: `python3 -m unittest discover -s tests -q` passed (53 tests)
+- Smoke test: `python3 scripts/smoke_test.py` passed
+- Dual-lane validation in `tests/test_m5_http.py`:
+  - Lane 1: Safe failure when client does not advertise elicitation support ✓
+  - Lane 2: Successful confirmed termination of real subprocess over HTTP ✓
+
+**Parity Judgment**
+
+The branch meets the documented M5 target:
+
+- `kill_process` exposed on HTTP server ✓
+- Server-side elicitation enforced before termination ✓
+- Exact confirmation phrase flow implemented (`CONFIRM PID {pid}`, case-insensitive) ✓
+- Result payloads and status values align with M5 contract ✓
+- Existing M1–M4 surfaces intact (tools, prompts, resources, HTTP auth/session) ✓
+- Lecture client includes prompt/resource helper tools and local terminal elicitation support ✓
+
+**Blockers:** None found in exercised M5 scope.
+
+**Owners:** Newt (QA), Ash (Implementation), Dallas (Specs), Bishop (Semantics)
+
+**Status:** Accepted & Ready for Publication

@@ -4,7 +4,7 @@ import argparse
 from typing import Annotated
 from urllib.parse import parse_qs
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import Context, FastMCP
 from pydantic import Field
 from starlette.responses import PlainTextResponse
 import uvicorn
@@ -20,6 +20,7 @@ from mcp_linux_diag_server.http_config import (
 )
 from mcp_linux_diag_server.tools import (
     BasicProcessInfo,
+    KillProcessResult,
     LogSnapshotSummary,
     ProcessDetailResult,
     ProcessQueryResult,
@@ -28,6 +29,7 @@ from mcp_linux_diag_server.tools import (
     create_log_snapshot as collect_log_snapshot,
     get_process_by_id as collect_process_by_id,
     get_processes_by_name as collect_processes_by_name,
+    kill_process as perform_kill_process,
     render_log_snapshot_resource,
     list_processes as collect_process_list,
 )
@@ -35,9 +37,9 @@ from mcp_linux_diag_server.tools import (
 server = FastMCP(
     name="Linux Diagnostics Demo",
     instructions=(
-        "Milestone 4 teaching server. Use tools to collect Linux diagnostics, "
+        "Milestone 5 teaching server. Use tools to collect Linux diagnostics, "
         "read snapshot resources for larger results, discover prompts for guided workflows, "
-        "and connect over authenticated HTTP transport."
+        "connect over authenticated HTTP transport, and require explicit elicitation before risky actions."
     ),
     host=DEFAULT_HTTP_HOST,
     port=DEFAULT_HTTP_PORT,
@@ -113,6 +115,29 @@ def get_process_by_name(
 ) -> ProcessQueryResult:
     """Return paged detailed Linux process information for a process name."""
     return collect_processes_by_name(process_name, page_number=page_number, page_size=page_size)
+
+
+@server.tool(
+    name="kill_process",
+    title="Kill Process",
+    description=(
+        "Terminate a running Linux process only after explicit elicitation. "
+        "When process_id is omitted, the server asks the client to choose from top CPU consumers."
+    ),
+)
+async def kill_process(
+    ctx: Context,
+    process_id: Annotated[
+        int | None,
+        Field(description="Optional Linux process ID to terminate. Omit it to choose from the top sampled CPU candidates."),
+    ] = None,
+    reason: Annotated[
+        str | None,
+        Field(description="Optional reason to include in the termination result."),
+    ] = None,
+) -> KillProcessResult:
+    """Terminate a process only after explicit user confirmation."""
+    return await perform_kill_process(process_id=process_id, reason=reason, ctx=ctx)
 
 
 @server.tool(
@@ -251,7 +276,7 @@ def create_http_app():
 
 def build_parser() -> argparse.ArgumentParser:
     """Create the CLI parser for the HTTP MCP server."""
-    parser = argparse.ArgumentParser(description="Run the Milestone 4 Linux diagnostics MCP server over HTTP.")
+    parser = argparse.ArgumentParser(description="Run the Milestone 5 Linux diagnostics MCP server over HTTP.")
     parser.add_argument("--host", default=DEFAULT_HTTP_HOST, help=f"HTTP host to bind. Defaults to {DEFAULT_HTTP_HOST}.")
     parser.add_argument("--port", type=int, default=DEFAULT_HTTP_PORT, help=f"HTTP port to bind. Defaults to {DEFAULT_HTTP_PORT}.")
     return parser

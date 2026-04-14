@@ -2,12 +2,17 @@
 
 from .processes import (
     BasicProcessInfo,
+    KillProcessResult,
+    ProcessCpuUsage,
     ProcessDetailResult,
     ProcessMemorySnapshot,
     ProcessQueryResult,
     get_process_by_id,
+    get_process_candidate_by_id,
     get_processes_by_name,
+    kill_process,
     list_processes,
+    sample_top_cpu_processes,
 )
 from .log_snapshots import (
     LogSnapshotLine,
@@ -32,6 +37,8 @@ __all__ = [
     "LogSnapshotPage",
     "LogSnapshotPagination",
     "LogSnapshotSummary",
+    "KillProcessResult",
+    "ProcessCpuUsage",
     "ProcessDetailResult",
     "ProcessInfoResult",
     "ProcessMemorySnapshot",
@@ -42,10 +49,13 @@ __all__ = [
     "create_log_snapshot",
     "clear_log_snapshots",
     "get_process_by_id",
+    "get_process_candidate_by_id",
     "get_processes_by_name",
     "get_process_by_name",
     "get_log_snapshot_page",
+    "kill_process",
     "list_processes",
     "get_process_list",
     "render_log_snapshot_resource",
+    "sample_top_cpu_processes",
 ]

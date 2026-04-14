@@ -16,6 +16,9 @@
 - Live M1 validation in WSL works via `.env.local` plus `MCP_DEMO_AZURE_OPENAI_USE_DEFAULT_CREDENTIAL=true`; no extra shell export was needed once Azure CLI auth existed locally.
 - The cleanest proof of a true end-to-end lecture run is the single-prompt client trace from `src/mcp_linux_diag_server/client.py`: `Connected to MCP server`, then `[tool] get_system_info({})`, then a model-written JSON answer.
 - `scripts/smoke_test.py` is still a preflight smoke, not a live-auth smoke: it proves server startup and the client's missing-config guardrail, but not a successful Azure-backed completion.
+- M5 reviewer pass criteria are now concrete: full `python3 -m unittest discover -s tests -q` plus `python3 scripts/smoke_test.py` must both pass, and `tests/test_m5_http.py` must prove both the no-elicitation failure path and a real confirmed subprocess termination path.
+- Current M5 branch state matches the documented target that was claimed: `kill_process` is advertised, HTTP auth/session flow still works, prompts/resources remain reachable, and the lecture client exposes prompt/resource helper tools plus local terminal elicitation handling.
+- Regression note: full-suite output is noisy because some client tests intentionally print `[tool] ...` and elicitation prompts, but the suite still completed cleanly (53 tests passing); treat the noise as cosmetic, not a blocker.
 
 ---
 

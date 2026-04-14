@@ -10,7 +10,7 @@ This roadmap mirrors the teaching arc of the original C# `MCPDemo` repository, b
 | 2 | Process inspection | Linux process listing, per-PID detail, and by-name paging | ✅ Complete |
 | 3 | Resources and prompts | Linux log snapshot resources + prompts | ✅ Complete |
 | 4 | HTTP transport and security | Python HTTP MCP transport + auth | ✅ Complete |
-| 5 | Elicitation | Confirmation flow for risky operations | ⏳ Planned |
+| 5 | Elicitation | Confirmation flow for risky operations | ✅ Complete |
 | 6 | Sampling-assisted diagnostics | AI-assisted Linux diagnostics queries | ⏳ Planned |
 | 7 | Roots and boundaries | Safe filesystem/config roots | ⏳ Planned |
 
@@ -59,11 +59,13 @@ Implemented scope:
 - updated the lecture client, smoke path, and inspector config for HTTP mode
 - kept the Milestone 1-3 tool, resource, and prompt surface unchanged
 
-## Milestone 5 – Elicitation ⏳
+## Milestone 5 – Elicitation ✅
 
-Planned scope:
-- human confirmation for risky operations
-- missing-parameter collection through elicitation
+Implemented scope:
+- `kill_process` with server-driven form elicitation
+- top-CPU candidate sampling when `process_id` is omitted
+- mandatory typed confirmation phrase before termination
+- Linux-safe SIGTERM then SIGKILL fallback semantics
 
 ## Milestone 6 – Sampling-assisted diagnostics ⏳
 
@@ -79,4 +81,4 @@ Planned scope:
 
 ## Important Parity Note
 
-This repo intentionally follows the **same milestone progression** as the original C# demo. Milestones 1-4 now have Python parity; public documentation should stay aligned with the real implementation state for Milestone 5 and later.
+This repo intentionally follows the **same milestone progression** as the original C# demo. Milestones 1-5 now have Python parity; public documentation should stay aligned with the real implementation state for Milestone 6 and later.

@@ -19,6 +19,10 @@
 - Microsoft Agent Framework and the official Python MCP package are the primary implementation targets.
 - The Python chat client now auto-loads a git-ignored `.env.local`, with shell env vars still taking precedence and `--no-local-env` available for tests.
 - The upstream .NET chat app currently sources Azure OpenAI endpoint/deployment from code and relies on `DefaultAzureCredential`, which needs explicit WSL-friendly auth if the Python client runs under Linux.
+- Python MCP SDK elicitation is available through `FastMCP` context/session plumbing even though `FastMCP` itself does not expose a top-level helper; dynamic dropdown-style forms are easiest via `ctx.request_context.session.elicit_form(...)` with a hand-built schema.
+- Milestone 5 parity lives primarily in `src/mcp_linux_diag_server/tools/processes.py`, `src/mcp_linux_diag_server/server.py`, and `src/mcp_linux_diag_server/client.py`: `/proc` CPU delta sampling selects top candidates, `kill_process` always requires `CONFIRM PID {pid}`, and the lecture client can fulfill form elicitation in the local terminal.
+- Linux termination semantics for the demo are safest as `SIGTERM` → short wait → `SIGKILL`, while treating `/proc/<pid>/stat` zombie state as exited so subprocess tests do not hang waiting on another parent to reap.
+- Regression coverage for M5 now lives in `tests/test_processes.py`, `tests/test_m5_http.py`, `tests/test_client.py`, plus the safe no-elicitation check in `scripts/smoke_test.py`.
 
 ### C# Codebase Architecture (2026-04-14)
 

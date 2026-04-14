@@ -15,7 +15,8 @@ from typing import Any, Mapping, Protocol
 import httpx
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
-from mcp.types import CallToolResult, TextContent, Tool
+import mcp.types as types
+from mcp.types import CallToolResult, ElicitRequestParams, TextContent, Tool
 
 from mcp_linux_diag_server.http_config import API_KEY_HEADER, DEFAULT_HTTP_HOST, DEFAULT_HTTP_PORT, DEMO_API_KEY, build_mcp_url
 
@@ -28,6 +29,8 @@ DEFAULT_SYSTEM_PROMPT = (
     "When the user asks about the system, use get_system_info before answering. "
     "When the user asks about processes, list them first and then use get_process_by_id "
     "or get_process_by_name for detail. "
+    "If the user wants to terminate a process, use kill_process and let the server drive "
+    "the confirmation workflow. Never invent a PID when the user wants to choose interactively. "
     "When you need a guided workflow, call list_prompts and then get_prompt. "
     "When a tool returns a resource URI, call read_resource to inspect it, and use "
     "list_resource_templates to learn the pagination pattern. "
@@ -380,6 +383,101 @@ def serialize_tool_result(result: CallToolResult) -> str:
     return json.dumps(result.model_dump(mode="json"), indent=2, sort_keys=True)
 
 
+def supports_terminal_elicitation() -> bool:
+    """Return True when the lecture client can safely prompt the local user."""
+    return sys.stdin.isatty() and sys.stdout.isatty()
+
+
+async def terminal_elicitation_callback(
+    _context,  # noqa: ANN001
+    params: ElicitRequestParams,
+) -> types.ElicitResult | types.ErrorData:
+    """Handle MCP form elicitation in the lecture client's local terminal."""
+    if getattr(params, "mode", None) != "form":
+        return types.ErrorData(code=types.INVALID_REQUEST, message="Only form elicitation is supported.")
+
+    requested_schema = params.requestedSchema
+    if not isinstance(requested_schema, dict):
+        return types.ErrorData(code=types.INVALID_REQUEST, message="Unsupported elicitation schema.")
+
+    properties = requested_schema.get("properties")
+    if not isinstance(properties, dict) or len(properties) != 1:
+        return types.ErrorData(code=types.INVALID_REQUEST, message="Only single-field elicitation forms are supported.")
+
+    field_name, field_schema = next(iter(properties.items()))
+    if not isinstance(field_schema, dict):
+        return types.ErrorData(code=types.INVALID_REQUEST, message="Unsupported elicitation field schema.")
+
+    print(f"\n[elicit] {params.message}")
+    if _field_has_choices(field_schema):
+        return await asyncio.to_thread(_prompt_for_choice, field_name, field_schema)
+    return await asyncio.to_thread(_prompt_for_text, field_name, field_schema)
+
+
+def _field_has_choices(field_schema: dict[str, Any]) -> bool:
+    return isinstance(field_schema.get("oneOf"), list) or isinstance(field_schema.get("enum"), list)
+
+
+def _prompt_for_choice(field_name: str, field_schema: dict[str, Any]) -> types.ElicitResult | types.ErrorData:
+    options = _extract_choice_options(field_schema)
+    if not options:
+        return types.ErrorData(code=types.INVALID_REQUEST, message="No selectable options were provided.")
+
+    for index, option in enumerate(options, start=1):
+        print(f"  {index}. {option['title']}")
+
+    while True:
+        choice = input("Selection (blank cancels): ").strip()
+        if not choice:
+            return types.ElicitResult(action="cancel")
+        try:
+            selected_index = int(choice)
+        except ValueError:
+            print("Enter a number from the list or press Enter to cancel.")
+            continue
+        if 1 <= selected_index <= len(options):
+            selected = options[selected_index - 1]
+            return types.ElicitResult(action="accept", content={field_name: selected["value"]})
+        print("Selection out of range. Try again.")
+
+
+def _extract_choice_options(field_schema: dict[str, Any]) -> list[dict[str, str]]:
+    if isinstance(field_schema.get("oneOf"), list):
+        options: list[dict[str, str]] = []
+        for option in field_schema["oneOf"]:
+            if not isinstance(option, dict) or "const" not in option:
+                continue
+            value = str(option["const"])
+            title = str(option.get("title") or value)
+            options.append({"value": value, "title": title})
+        return options
+
+    if isinstance(field_schema.get("enum"), list):
+        titles = field_schema.get("enumTitles")
+        return [
+            {
+                "value": str(value),
+                "title": str(titles[index]) if isinstance(titles, list) and index < len(titles) else str(value),
+            }
+            for index, value in enumerate(field_schema["enum"])
+        ]
+
+    return []
+
+
+def _prompt_for_text(field_name: str, field_schema: dict[str, Any]) -> types.ElicitResult:
+    title = field_schema.get("title")
+    description = field_schema.get("description")
+    if title:
+        print(f"{title}:")
+    if description:
+        print(description)
+    value = input("Value (blank cancels): ").strip()
+    if not value:
+        return types.ElicitResult(action="cancel")
+    return types.ElicitResult(action="accept", content={field_name: value})
+
+
 async def call_client_helper(session: ClientSession, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
     """Execute a prompt/resource helper call through the MCP client session."""
 
@@ -478,6 +576,7 @@ async def connect_local_mcp(
     server_module: str = "mcp_linux_diag_server",
     server_host: str = DEFAULT_HTTP_HOST,
     server_port: int = DEFAULT_HTTP_PORT,
+    elicitation_callback=None,  # noqa: ANN001
 ):
     """Launch the local MCP HTTP server and yield an initialized client session."""  # noqa: ANN201
     env = dict(os.environ)
@@ -503,7 +602,10 @@ async def connect_local_mcp(
                 build_mcp_url(host=server_host, port=server_port),
                 http_client=http_client,
             ) as (read, write, get_session_id):
-                async with ClientSession(read, write) as session:
+                resolved_elicitation_callback = elicitation_callback
+                if resolved_elicitation_callback is None and supports_terminal_elicitation():
+                    resolved_elicitation_callback = terminal_elicitation_callback
+                async with ClientSession(read, write, elicitation_callback=resolved_elicitation_callback) as session:
                     await session.initialize()
                     if not get_session_id():
                         raise RuntimeError("MCP HTTP session initialization did not return an mcp-session-id header.")
@@ -616,7 +718,7 @@ async def run_chat(
 
 def build_parser() -> argparse.ArgumentParser:
     """Create the CLI parser for the lecture chat client."""
-    parser = argparse.ArgumentParser(description="Run the Milestone 4 Azure OpenAI chat client.")
+    parser = argparse.ArgumentParser(description="Run the Milestone 5 Azure OpenAI chat client.")
     parser.add_argument("question", nargs="?", help="Optional single prompt to run instead of interactive mode.")
     parser.add_argument("--prompt", help="Alias for the positional question argument.")
     parser.add_argument("--json", action="store_true", help="Emit single-prompt output as JSON.")

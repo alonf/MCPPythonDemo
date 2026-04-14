@@ -5,6 +5,7 @@ import subprocess
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from mcp.types import CallToolResult, TextContent, Tool
 
@@ -18,8 +19,10 @@ from mcp_linux_diag_server.client import (
     build_openai_tools,
     call_client_helper,
     load_local_env_file,
+    terminal_elicitation_callback,
     run_agent_turn,
     serialize_tool_result,
+    supports_terminal_elicitation,
 )
 
 
@@ -150,6 +153,13 @@ class ToolTranslationTests(unittest.TestCase):
             helper_names,
             {"list_prompts", "get_prompt", "list_resources", "list_resource_templates", "read_resource"},
         )
+
+    def test_supports_terminal_elicitation_requires_tty(self) -> None:
+        with (
+            patch.object(sys.stdin, "isatty", return_value=True),
+            patch.object(sys.stdout, "isatty", return_value=True),
+        ):
+            self.assertTrue(supports_terminal_elicitation())
 
 
 class FakeSession:
@@ -282,6 +292,34 @@ class ClientHelperTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(payload["description"], "DiagnoseSystemHealth")
         self.assertIn("search_text", payload["messages"][0]["content"]["text"])
+
+    async def test_terminal_elicitation_callback_accepts_oneof_selection(self) -> None:
+        params = type(
+            "Params",
+            (),
+            {
+                "mode": "form",
+                "message": "Choose a process.",
+                "requestedSchema": {
+                    "type": "object",
+                    "properties": {
+                        "process": {
+                            "type": "string",
+                            "oneOf": [
+                                {"const": "100", "title": "python (PID 100)"},
+                                {"const": "200", "title": "worker (PID 200)"},
+                            ],
+                        }
+                    },
+                },
+            },
+        )()
+
+        with patch("builtins.input", return_value="2"):
+            result = await terminal_elicitation_callback(None, params)
+
+        self.assertEqual(result.action, "accept")
+        self.assertEqual(result.content, {"process": "200"})
 
 
 if __name__ == "__main__":

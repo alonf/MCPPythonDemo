@@ -1,4 +1,4 @@
-"""Shared HTTP transport settings for Milestone 4."""
+"""Shared HTTP transport settings for the Milestone 5 demo."""
 
 from __future__ import annotations
 

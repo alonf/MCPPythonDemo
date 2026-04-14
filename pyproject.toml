@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "mcp-linux-diag-server"
 version = "0.1.0"
-description = "Milestone 4 Linux diagnostics MCP server with authenticated HTTP transport, tools, resources, prompts, and a lecture chat client."
+description = "Milestone 5 Linux diagnostics MCP server with authenticated HTTP transport, elicitation-gated process control, tools, resources, prompts, and a lecture chat client."
 readme = "README.md"
 license = { file = "LICENSE.txt" }
 requires-python = ">=3.12"
