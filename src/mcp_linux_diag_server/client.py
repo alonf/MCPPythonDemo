@@ -1,4 +1,4 @@
-"""Interactive lecture chat client for the Milestone 1 MCP server."""
+"""Interactive lecture chat client for the Milestone 3 MCP server."""
 
 from __future__ import annotations
 
@@ -24,6 +24,9 @@ DEFAULT_SYSTEM_PROMPT = (
     "When the user asks about the system, use get_system_info before answering. "
     "When the user asks about processes, list them first and then use get_process_by_id "
     "or get_process_by_name for detail. "
+    "When you need a guided workflow, call list_prompts and then get_prompt. "
+    "When a tool returns a resource URI, call read_resource to inspect it, and use "
+    "list_resource_templates to learn the pagination pattern. "
     "Keep answers concise, practical, and grounded in tool results."
 )
 AZURE_OPENAI_SCOPE = "https://cognitiveservices.azure.com/.default"
@@ -277,6 +280,71 @@ def build_openai_tools(mcp_tools: list[Tool]) -> list[dict[str, Any]]:
     ]
 
 
+def build_client_helper_tools() -> list[dict[str, Any]]:
+    """Expose MCP prompt/resource APIs to the model as local helper tools."""
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": "list_prompts",
+                "description": "List the MCP prompts advertised by the server.",
+                "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "get_prompt",
+                "description": "Retrieve one MCP prompt by name, optionally passing string arguments.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string", "description": "Prompt name to retrieve."},
+                        "arguments": {
+                            "type": "object",
+                            "description": "Optional prompt arguments as string values.",
+                            "additionalProperties": {"type": "string"},
+                        },
+                    },
+                    "required": ["name"],
+                    "additionalProperties": False,
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "list_resources",
+                "description": "List concrete MCP resources currently advertised by the server.",
+                "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "list_resource_templates",
+                "description": "List MCP resource templates, including paginated URI patterns.",
+                "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "read_resource",
+                "description": "Read a resource URI returned by the server or shown in a resource template.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "uri": {"type": "string", "description": "Full resource URI to read."},
+                    },
+                    "required": ["uri"],
+                    "additionalProperties": False,
+                },
+            },
+        },
+    ]
+
+
 def assistant_turn_to_message(turn: AssistantTurn) -> dict[str, Any]:
     """Convert a simplified assistant turn back to an OpenAI chat message."""
     message: dict[str, Any] = {"role": "assistant", "content": turn.content}
@@ -307,6 +375,25 @@ def serialize_tool_result(result: CallToolResult) -> str:
     return json.dumps(result.model_dump(mode="json"), indent=2, sort_keys=True)
 
 
+async def call_client_helper(session: ClientSession, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    """Execute a prompt/resource helper call through the MCP client session."""
+
+    if name == "list_prompts":
+        return (await session.list_prompts()).model_dump(mode="json")
+    if name == "get_prompt":
+        prompt_name = str(arguments["name"])
+        raw_arguments = arguments.get("arguments") or {}
+        prompt_arguments = {key: str(value) for key, value in raw_arguments.items()}
+        return (await session.get_prompt(prompt_name, prompt_arguments or None)).model_dump(mode="json")
+    if name == "list_resources":
+        return (await session.list_resources()).model_dump(mode="json")
+    if name == "list_resource_templates":
+        return (await session.list_resource_templates()).model_dump(mode="json")
+    if name == "read_resource":
+        return (await session.read_resource(str(arguments["uri"]))).model_dump(mode="json")
+    raise ValueError(f"Unknown local helper tool '{name}'.")
+
+
 async def run_agent_turn(
     *,
     session: ClientSession,
@@ -327,12 +414,20 @@ async def run_agent_turn(
         for tool_call in assistant_turn.tool_calls:
             if emit_trace:
                 print(f"[tool] {tool_call.name}({json.dumps(tool_call.arguments, sort_keys=True)})")
-            result = await session.call_tool(tool_call.name, tool_call.arguments)
+            if tool_call.name in {"list_prompts", "get_prompt", "list_resources", "list_resource_templates", "read_resource"}:
+                serialized_result = json.dumps(
+                    await call_client_helper(session, tool_call.name, tool_call.arguments),
+                    indent=2,
+                    sort_keys=True,
+                )
+            else:
+                result = await session.call_tool(tool_call.name, tool_call.arguments)
+                serialized_result = serialize_tool_result(result)
             messages.append(
                 {
                     "role": "tool",
                     "tool_call_id": tool_call.id,
-                    "content": serialize_tool_result(result),
+                    "content": serialized_result,
                 }
             )
 
@@ -366,7 +461,7 @@ async def run_single_prompt(
                 session=session,
                 model=model,
                 messages=messages,
-                tools=build_openai_tools(mcp_tools),
+                tools=build_openai_tools(mcp_tools) + build_client_helper_tools(),
                 emit_trace=emit_trace,
             )
             return {
@@ -399,7 +494,7 @@ async def run_chat(
             print(f"Connected to MCP server. Tools: {tool_names}")
 
             messages: list[dict[str, Any]] = [{"role": "system", "content": config.system_prompt}]
-            openai_tools = build_openai_tools(mcp_tools)
+            openai_tools = build_openai_tools(mcp_tools) + build_client_helper_tools()
 
             pending_prompt = initial_prompt
             while True:
@@ -451,7 +546,7 @@ async def run_chat(
 
 def build_parser() -> argparse.ArgumentParser:
     """Create the CLI parser for the lecture chat client."""
-    parser = argparse.ArgumentParser(description="Run the Milestone 1 Azure OpenAI chat client.")
+    parser = argparse.ArgumentParser(description="Run the Milestone 3 Azure OpenAI chat client.")
     parser.add_argument("question", nargs="?", help="Optional single prompt to run instead of interactive mode.")
     parser.add_argument("--prompt", help="Alias for the positional question argument.")
     parser.add_argument("--json", action="store_true", help="Emit single-prompt output as JSON.")

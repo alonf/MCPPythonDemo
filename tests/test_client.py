@@ -14,7 +14,9 @@ from mcp_linux_diag_server.client import (
     ClientConfigurationError,
     ToolCallRequest,
     assistant_turn_to_message,
+    build_client_helper_tools,
     build_openai_tools,
+    call_client_helper,
     load_local_env_file,
     run_agent_turn,
     serialize_tool_result,
@@ -142,6 +144,13 @@ class ToolTranslationTests(unittest.TestCase):
 
         self.assertIn("demo-host", serialize_tool_result(result))
 
+    def test_build_client_helper_tools_exposes_prompt_and_resource_helpers(self) -> None:
+        helper_names = {tool["function"]["name"] for tool in build_client_helper_tools()}
+        self.assertEqual(
+            helper_names,
+            {"list_prompts", "get_prompt", "list_resources", "list_resource_templates", "read_resource"},
+        )
+
 
 class FakeSession:
     def __init__(self) -> None:
@@ -155,6 +164,29 @@ class FakeSession:
             isError=False,
         )
 
+    async def list_prompts(self):  # noqa: ANN201
+        return _FakeResult({"prompts": [{"name": "DiagnoseSystemHealth"}]})
+
+    async def get_prompt(self, name, arguments=None):  # noqa: ANN001, ANN201
+        return _FakeResult({"description": name, "messages": [{"role": "user", "content": {"type": "text", "text": str(arguments or {})}}]})
+
+    async def list_resources(self):  # noqa: ANN201
+        return _FakeResult({"resources": []})
+
+    async def list_resource_templates(self):  # noqa: ANN201
+        return _FakeResult({"resourceTemplates": [{"uriTemplate": "syslog://snapshot/{snapshot_id}"}]})
+
+    async def read_resource(self, uri):  # noqa: ANN001, ANN201
+        return _FakeResult({"contents": [{"uri": uri, "text": "{}"}]})
+
+
+class _FakeResult:
+    def __init__(self, payload: dict[str, object]) -> None:
+        self.payload = payload
+
+    def model_dump(self, *, mode: str = "python") -> dict[str, object]:  # noqa: ARG002
+        return self.payload
+
 
 class FakeModel:
     def __init__(self) -> None:
@@ -164,6 +196,20 @@ class FakeModel:
                 tool_calls=[ToolCallRequest(id="call-1", name="get_system_info", arguments={})],
             ),
             AssistantTurn(content="The host is demo-host and uptime is 12.5 seconds.", tool_calls=[]),
+        ]
+
+    def complete(self, messages, tools):  # noqa: ANN001, ANN201
+        return self.turns.pop(0)
+
+
+class PromptHelperModel:
+    def __init__(self) -> None:
+        self.turns = [
+            AssistantTurn(
+                content="",
+                tool_calls=[ToolCallRequest(id="call-1", name="list_prompts", arguments={})],
+            ),
+            AssistantTurn(content="Use DiagnoseSystemHealth.", tool_calls=[]),
         ]
 
     def complete(self, messages, tools):  # noqa: ANN001, ANN201
@@ -187,6 +233,22 @@ class AgentLoopTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(session.calls, [("get_system_info", {})])
         self.assertEqual(messages[-1]["content"], "The host is demo-host and uptime is 12.5 seconds.")
 
+    async def test_run_agent_turn_supports_prompt_and_resource_helpers(self) -> None:
+        session = FakeSession()
+        model = PromptHelperModel()
+        messages = [{"role": "system", "content": "Be helpful."}, {"role": "user", "content": "Guide me."}]
+
+        answer = await run_agent_turn(
+            session=session,
+            model=model,
+            messages=messages,
+            tools=build_client_helper_tools(),
+            emit_trace=False,
+        )
+
+        self.assertEqual(answer, "Use DiagnoseSystemHealth.")
+        self.assertIn("DiagnoseSystemHealth", messages[-2]["content"])
+
     async def test_cli_reports_missing_configuration_cleanly(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
         env = {
@@ -206,6 +268,20 @@ class AgentLoopTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result.returncode, 2)
         self.assertIn("Missing Azure OpenAI settings", result.stderr)
+
+
+class ClientHelperTests(unittest.IsolatedAsyncioTestCase):
+    async def test_call_client_helper_routes_get_prompt(self) -> None:
+        session = FakeSession()
+
+        payload = await call_client_helper(
+            session,
+            "get_prompt",
+            {"name": "DiagnoseSystemHealth", "arguments": {"search_text": "error"}},
+        )
+
+        self.assertEqual(payload["description"], "DiagnoseSystemHealth")
+        self.assertIn("search_text", payload["messages"][0]["content"]["text"])
 
 
 if __name__ == "__main__":

@@ -8,7 +8,7 @@ This roadmap mirrors the teaching arc of the original C# `MCPDemo` repository, b
 |----------|--------------------|-------------------|--------|
 | 1 | Minimal stdio diagnostics tool | `get_system_info` + lecture chat client | ✅ Complete |
 | 2 | Process inspection | Linux process listing, per-PID detail, and by-name paging | ✅ Complete |
-| 3 | Resources and prompts | Linux snapshot resources + prompts | ⏳ Planned |
+| 3 | Resources and prompts | Linux log snapshot resources + prompts | ✅ Complete |
 | 4 | HTTP transport and security | Python HTTP MCP transport + auth | ⏳ Planned |
 | 5 | Elicitation | Confirmation flow for risky operations | ⏳ Planned |
 | 6 | Sampling-assisted diagnostics | AI-assisted Linux diagnostics queries | ⏳ Planned |
@@ -36,12 +36,18 @@ Implemented scope:
 - inspect matching processes by name with default paging (`page_size=5`)
 - keep the summary-first, detail-second teaching flow
 
-## Milestone 3 – Resources and prompts ⏳
+## Milestone 3 – Resources and prompts ✅
 
-Planned scope:
-- snapshot-style Linux diagnostic resources
-- prompts that guide analysis over those resources
-- clear tool/resource/prompt separation
+Implemented scope:
+- `create_log_snapshot` tool for common Linux log groups (`system`, `security`, `kernel`, `package`)
+- read-only `syslog://snapshot/{snapshot_id}` resources with paged reads via `?limit=...&offset=...`
+- four MCP prompts mirroring the C# teaching workflows:
+  - `AnalyzeRecentApplicationErrors`
+  - `ExplainHighCpu`
+  - `DetectSecurityAnomalies`
+  - `DiagnoseSystemHealth`
+- chat-client helper access to MCP prompts and resources
+- clear tool/resource/prompt separation, with tools creating snapshots and resources reading them
 
 ## Milestone 4 – HTTP transport and security ⏳
 
@@ -69,4 +75,4 @@ Planned scope:
 
 ## Important Parity Note
 
-This repo intentionally follows the **same milestone progression** as the original C# demo, but it does **not** claim feature parity with Milestone 3 and later yet. Public documentation should stay aligned with the real Python implementation state.
+This repo intentionally follows the **same milestone progression** as the original C# demo. Milestones 1-3 now have Python parity; public documentation should stay aligned with the real implementation state for Milestone 4 and later.

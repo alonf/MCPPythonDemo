@@ -40,10 +40,31 @@ async def run_server_smoke() -> dict[str, object]:
                 "get_process_list",
                 "get_process_by_id",
                 "get_process_by_name",
+                "create_log_snapshot",
             }
             if not expected_tools.issubset(tool_names):
                 missing_tools = sorted(expected_tools - set(tool_names))
                 raise RuntimeError(f"Expected tools were not advertised by the server: {missing_tools}")
+
+            prompts = await session.list_prompts()
+            prompt_names = {prompt.name for prompt in prompts.prompts}
+            expected_prompts = {
+                "AnalyzeRecentApplicationErrors",
+                "ExplainHighCpu",
+                "DetectSecurityAnomalies",
+                "DiagnoseSystemHealth",
+            }
+            if prompt_names != expected_prompts:
+                raise RuntimeError(f"Expected prompts were not advertised by the server: {sorted(expected_prompts - prompt_names)}")
+
+            resource_templates = await session.list_resource_templates()
+            template_uris = {template.uriTemplate for template in resource_templates.resourceTemplates}
+            expected_templates = {
+                "syslog://snapshot/{snapshot_id}",
+                "syslog://snapshot/{snapshot_id}?limit={limit}&offset={offset}",
+            }
+            if not expected_templates.issubset(template_uris):
+                raise RuntimeError(f"Expected resource templates were not advertised by the server: {sorted(expected_templates - template_uris)}")
 
             system_result = await session.call_tool("get_system_info", {})
             if system_result.isError:
@@ -80,11 +101,31 @@ async def run_server_smoke() -> dict[str, object]:
             if process_detail is None or process_page is None:
                 raise RuntimeError("Unable to complete live process detail smoke calls")
 
+            snapshot_result = await session.call_tool("create_log_snapshot", {"filter_text": "error", "max_lines": 25})
+            if snapshot_result.isError:
+                raise RuntimeError(f"Log snapshot tool failed: {snapshot_result.content}")
+
+            snapshot_payload = snapshot_result.structuredContent
+            if not isinstance(snapshot_payload, dict) or "resource_uri" not in snapshot_payload:
+                raise RuntimeError("Expected create_log_snapshot to return a resource URI")
+
+            prompt_result = await session.get_prompt("DiagnoseSystemHealth", {"search_text": "error"})
+            if not prompt_result.messages:
+                raise RuntimeError("Expected DiagnoseSystemHealth prompt to return at least one message")
+
+            resource_result = await session.read_resource(snapshot_payload["resource_uri"])
+            rendered_snapshot = resource_result.contents[0].text
+            if '"pagination"' not in rendered_snapshot:
+                raise RuntimeError("Expected log snapshot resource to include pagination metadata")
+
             return {
                 "tools": tool_names,
+                "prompts": sorted(prompt_names),
+                "resource_templates": sorted(template_uris),
                 "system_info": system_result.structuredContent,
                 "process_sample": process_detail,
                 "process_page": process_page,
+                "log_snapshot": snapshot_payload,
             }
 
 
